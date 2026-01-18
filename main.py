@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 import math
 from decimal import Decimal
-from shutil import register_unpack_format
+
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -111,7 +111,7 @@ class Rat:
         return Rat(f"[{p}|{q}]").simplify()
 
     @staticmethod
-    def ftr_rep(b: float, a: float = 0):
+    def ftr_rep(b: float, a: float = 0) -> Rat:
         """
         Converts a repeating floating point number into a Rational number.
         :param b: the repeating part in the form of a float.For example 0.123123... b=0.123
@@ -155,12 +155,16 @@ class Rat:
         """
         return Rat(f"[{self.q}|{self.p}]")
 
-    def add (self,other: Rat) -> Rat:
+    def add (self,other: Rat | int | float) -> Rat:
         """
         Adds two rational numbers.
         :param other: A Rat object.
         :return: The sum in form of a Rat object.
         """
+        if isinstance(other, int):
+            other = Rat(other)
+        if isinstance(other, float):
+            other = Rat.ftr(other)
 
         if self.q == other.q:
             return Rat(f"[{self.p + other.p}|{self.q}]")
@@ -169,7 +173,7 @@ class Rat:
             new_p = int(self.p*(new_q//self.q)+other.p*(new_q//other.q))
             return Rat(f"[{new_p}|{new_q}]")
 
-    def multiply(self,other: Rat | int) -> Rat:
+    def multiply(self,other: Rat | int | float) -> Rat:
         """
         Multiplies two rational numbers.
         :param other: A Rat object.
@@ -177,6 +181,9 @@ class Rat:
         """
         if isinstance(other, int):
             other = Rat(other)
+        if isinstance(other, float):
+            other = Rat.ftr(other)
+
         return Rat(f"[{self.p*other.p}|{self.q*other.q}]")
 
     def produce(self,n:int) -> Rat:
@@ -334,11 +341,9 @@ class Term:
             raise FormatError
 
         sign, x = _leading_unary(x)
-        logging.debug("Parsing term: %s", x)
 
         sep = x.index("x")
         if x[0] == "x":
-            logging.debug("No coefficient found, setting to 1")
             self.coefficient = Rat(1)
         else:
             try:
@@ -350,13 +355,12 @@ class Term:
                     raise FormatError("Could not parse the coefficient")
 
         self.coefficient = self.coefficient * sign
-        logging.debug("Coefficient parsed: %s", type(self.coefficient))
 
-        self.varipart = x[sep:]
+        self.variable_with_power = x[sep:]
 
-        if "^" in self.varipart:
-            sep = self.varipart.index("^")
-            self.power = int(self.varipart[sep+1:])
+        if "^" in self.variable_with_power:
+            sep = self.variable_with_power.index("^")
+            self.power = int(self.variable_with_power[sep + 1:])
 
         elif x[-1] != "x":
             raise FormatError
@@ -368,9 +372,9 @@ class Term:
 
     @property
     def face(self) -> str:
-        c = self.coefficient
+        c = str(self.coefficient)
         if self.coefficient.q == 1:
-            c = self.coefficient.p
+            c = str(self.coefficient.p)
         if self.power == 0:
             return f"{c}"
         if self.coefficient.p == 1:
@@ -387,29 +391,30 @@ class Term:
     def is_equal(self, other: Term) -> bool:
         """
         Returns True if both the terms are of same power
+        :param self:  The first term to be compared
         :param other: The second term to be compared
         :return: True if both terms are of same power otherwise False
         """
         return self.power == other.power
 
-    def __add__(self, other: Term) -> Term | None:
+    def __add__(self, other: Term) -> Term:
         if self.power == other.power:
             return Term(f"{self.coefficient + other.coefficient}x^{self.power}")
         else:
-            return None
+            raise ValueError("Cannot add terms with different powers")
 
-    def __radd__(self, other: Term) -> Term | None:
+    def __radd__(self, other: Term) -> Term:
         return self + other
 
-    def __mul__(self, other: int | Rat | Term) -> Term | None:
+    def __mul__(self, other: int | Rat | Term) -> Term:
         if isinstance(other,Term):
             return Term(f"{self.coefficient * other.coefficient}x^{self.power+other.power}")
         elif isinstance(other,Rat) or isinstance(other,int):
             return Term(f"{self.coefficient * other}x^{self.power}")
         else:
-            return None
+            raise TypeError(f"Cannot multiply a Term object with {type(other)}")
 
-    def __rmul__(self, other: int | Rat | Term) -> Term | None:
+    def __rmul__(self, other: int | Rat | Term) -> Term:
         return self * other
 
     def multiply(self, others) -> list[Term]:
@@ -440,16 +445,16 @@ class Term:
 
         return Term.arrange(Polynomial.shorten(result))
 
-    def __sub__(self, other):
+    def __sub__(self, other) -> Term:
         if self.power == other.power:
             return Term(f"{self.coefficient - other.coefficient}x^{self.power}")
         else:
-            return None
+            raise ValueError("Cannot subtract terms with different powers")
 
-    def __truediv__(self, other):
+    def __truediv__(self, other) -> Term:
         return Term(f"{self.coefficient / other.coefficient}x^{self.power - other.power}")
 
-    def __neg__(self):
+    def __neg__(self) -> Term:
         return Term(f"{-self.coefficient}x^{self.power}")
 
     def evaluate(self,n):
@@ -470,16 +475,16 @@ class Term:
         return sorted(terms, key=lambda term: term.power, reverse=True)
 
 
-    def __abs__(self):
+    def __abs__(self) -> Term:
         a = Term("1x^1")
         a.coefficient = abs(self.coefficient)
         a.power = self.power
         return a
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.face
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.face
 
 class Polynomial:
@@ -490,8 +495,18 @@ class Polynomial:
     class methods:
     -
     """
-    def __init__(self,expression:str):
-        allowed_symbols = ["+","-","*","/","^","(",")","[","]","|","0","1","2","3","4","5","6","7","8","9","x"]
+    def __init__(self,expression: str | int | Rat, var: str = "x"):
+        if len(var) != 1 or not var.isalpha():
+            raise FormatError(msg="Variable must be a single alphabetic character")
+        self.var = var.lower().strip()
+        if isinstance(expression, int) or isinstance(expression, Rat) or str(expression).strip() == "0":
+            self.terms = []
+            return
+
+        expression = expression.replace(self.var, "x")
+        logging.debug("expression before cleaning: %s", expression)
+        expression = expression.lower()
+        allowed_symbols = ["+","-","*","/","^","(",")","[","]","|","0","1","2","3","4","5","6","7","8","9", "x"]
         expression = expression.replace(" ", "")
         if "x" not in expression:
             raise FormatError(msg="THERE HAS TO BE ONE VARIABLE!?!!")
@@ -503,6 +518,12 @@ class Polynomial:
         expression = Polynomial._clean(expression)
         terms = Polynomial.exp_eval(expression)
         self.terms = Term.arrange(Polynomial.shorten(terms))
+
+    @classmethod
+    def zero(cls):
+        obj = cls.__new__(cls)
+        obj.terms = []
+        return obj
 
     @property
     def face(self) -> str:
@@ -517,7 +538,7 @@ class Polynomial:
             else:
                 result += f" - {abs(term)}"
 
-        return result
+        return result.replace("x", self.var)
 
     @staticmethod
     def shorten(nums:list[Term]) -> list[Term]:
@@ -543,8 +564,10 @@ class Polynomial:
         :param expr: The expression string to be cleaned.
         :return: The cleaned expression string.
         """
+
         while any(x in expr for x in ("++", "--", "+-", "-+", "*+", "/+")):
             expr = expr.replace("++", "+")
+            expr = str(expr) # ensure expr is str
             expr = expr.replace("--", "+")
             expr = expr.replace("+-", "-")
             expr = expr.replace("-+", "-")
@@ -566,9 +589,7 @@ class Polynomial:
                     elif ch == "]":
                         rat_depth -= 1
                     if depth == 0 and rat_depth == 0 and ch in "+-":
-                        print(j, ch)
                         point = j + i + 1
-                        print(point)
                         break
                 expr = expr[:i] + "(" + expr[i:point] + ")" + expr[point:]
             prev = sym
@@ -626,6 +647,7 @@ class Polynomial:
             elif ch in ops and depth == 0 and rat_depth == 0:
                 if expr[start:i] != "" and expr[start:i] not in ops:
                     parts.append(lead + expr[start:i])
+                    lead = ""
 
                 if ch == "-" and lead != "-":
                     lead = "-"
@@ -637,7 +659,8 @@ class Polynomial:
                     lead = ""
                 start = i+1
 
-        parts.append(expr[start:])
+        if expr[start:] != "" and expr[start:] not in ops:
+            parts.append(lead + expr[start:])
         return parts
 
     @staticmethod
@@ -667,7 +690,6 @@ class Polynomial:
     def exp_eval(expr: str) -> list[Term]:
         expr = expr.strip()
         expr = Polynomial._implicate_multiplication(expr)
-        logging.debug("Evaluating expression: %s", expr)
 
         # remove outer brackets
         sign, expr = _leading_unary(expr)
@@ -693,7 +715,6 @@ class Polynomial:
             return Polynomial.shorten(result)
 
         # base case
-        logging.debug("Base case reached with expression: %s", expr)
         try:
             return [Term(expr)*sign]
         except FormatError:
