@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 import math
 from decimal import Decimal
+from shutil import register_unpack_format
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -16,55 +17,6 @@ class FormatError(Exception):
     def __init__(self, msg="String formating is NOT ok"):
         super(FormatError, self).__init__(msg)
         self.msg = msg
-
-def ftr(n: float | int | Decimal) -> Rat:
-    """
-    Converts a floating point number into a Rational number.
-    :param n: a float
-    :return: The equivalent Rational number in the form of a Rat object.
-    """
-    # getting number of decimal places
-    n = float(n)
-    num = Decimal(str(n))
-    sign, digits, exp = num.as_tuple()
-    if not isinstance(exp, int):
-        raise ValueError("Decimal exponent is not an integer. NaN or Infinity are not supported")
-    p = int("".join(map(str, digits)))
-    q = 10 ** (-exp) if exp <= 0 else 1
-
-    if sign:
-        p = -p
-    return Rat(f"[{p}|{q}]").simplify()
-
-def ftr_rep(b: float, a: float = 0):
-    """
-    Converts a repeating floating point number into a Rational number.
-    :param b: the repeating part in the form of a float.For example 0.123123... b=0.123
-    :param a: if the number starts to repeat after a certain digit 'a' is the float till that digit
-    :return: The equivalent Rational number in the form of a Rat object.
-    """
-    if b <= 0 or b >= 1:
-        raise ValueError("b is out of range.The repeating part must be between 0 and 1")
-    a_dec = Decimal(str(a))
-    b_dec = Decimal(str(b))
-
-    # digits after decimal
-    m = a_dec.as_tuple().exponent
-    k = b_dec.as_tuple().exponent
-    if not isinstance(m, int) or not isinstance(k, int):
-        raise ValueError("Decimal exponent is not an integer. NaN or Infinity are not supported")
-
-    m = -m
-    k = -k
-
-    n1 = ftr(a_dec)
-
-    b_int = int(str(b_dec).replace(".", ""))
-    rep_num = Rat(f"[{b_int}|{10 ** k - 1}]")
-
-    shift = Rat(f"[1|{10 ** m}]")
-
-    return (n1 + rep_num * shift).simplify()
 
 def _parse_rat(x: str) -> tuple[int, int]:
     try:
@@ -100,6 +52,17 @@ def _parse_rat(x: str) -> tuple[int, int]:
 
     return p, q
 
+def _leading_unary(expr: str) -> tuple[int, str]:
+    sign = 1
+    i = 0
+
+    while i < len(expr) and expr[i] in "+-":
+        if expr[i] == "-":
+            sign *= -1
+        i += 1
+
+    return sign, expr[i:]
+
 class Rat:
     """Class for working with rational numbers.
 
@@ -126,6 +89,57 @@ class Rat:
     @property
     def face(self) -> str:
         return f"[{self.p}|{self.q}]"
+
+    @staticmethod
+    def ftr(n: float | int | Decimal) -> Rat:
+        """
+        Converts a floating point number into a Rational number.
+        :param n: a float
+        :return: The equivalent Rational number in the form of a Rat object.
+        """
+        # getting number of decimal places
+        n = float(n)
+        num = Decimal(str(n))
+        sign, digits, exp = num.as_tuple()
+        if not isinstance(exp, int):
+            raise ValueError("Decimal exponent is not an integer. NaN or Infinity are not supported")
+        p = int("".join(map(str, digits)))
+        q = 10 ** (-exp) if exp <= 0 else 1
+
+        if sign:
+            p = -p
+        return Rat(f"[{p}|{q}]").simplify()
+
+    @staticmethod
+    def ftr_rep(b: float, a: float = 0):
+        """
+        Converts a repeating floating point number into a Rational number.
+        :param b: the repeating part in the form of a float.For example 0.123123... b=0.123
+        :param a: if the number starts to repeat after a certain digit 'a' is the float till that digit
+        :return: The equivalent Rational number in the form of a Rat object.
+        """
+        if b <= 0 or b >= 1:
+            raise ValueError("b is out of range.The repeating part must be between 0 and 1")
+        a_dec = Decimal(str(a))
+        b_dec = Decimal(str(b))
+
+        # digits after decimal
+        m = a_dec.as_tuple().exponent
+        k = b_dec.as_tuple().exponent
+        if not isinstance(m, int) or not isinstance(k, int):
+            raise ValueError("Decimal exponent is not an integer. NaN or Infinity are not supported")
+
+        m = -m
+        k = -k
+
+        n1 = Rat.ftr(a_dec)
+
+        b_int = int(str(b_dec).replace(".", ""))
+        rep_num = Rat(f"[{b_int}|{10 ** k - 1}]")
+
+        shift = Rat(f"[1|{10 ** m}]")
+
+        return (n1 + rep_num * shift).simplify()
 
     def simplify(self) -> Rat:
         """
@@ -155,7 +169,7 @@ class Rat:
             new_p = int(self.p*(new_q//self.q)+other.p*(new_q//other.q))
             return Rat(f"[{new_p}|{new_q}]")
 
-    def multiply(self,other: Rat) -> Rat:
+    def multiply(self,other: Rat | int) -> Rat:
         """
         Multiplies two rational numbers.
         :param other: A Rat object.
@@ -195,7 +209,7 @@ class Rat:
         return self.add(other)
 
     def __mul__(self, other):
-        if isinstance(other, Rat):
+        if isinstance(other, Rat) or isinstance(other, int):
             return self.multiply(other).simplify()
         else:
             return self.value * other
@@ -319,11 +333,25 @@ class Term:
         if x.count("x") != 1:
             raise FormatError
 
+        sign, x = _leading_unary(x)
+        logging.debug("Parsing term: %s", x)
+
         sep = x.index("x")
         if x[0] == "x":
+            logging.debug("No coefficient found, setting to 1")
             self.coefficient = Rat(1)
         else:
-            self.coefficient = Rat(x[:sep])
+            try:
+                self.coefficient = Rat(x[:sep])
+            except FormatError:
+                try:
+                    self.coefficient = Rat.ftr(float(x[:sep]))
+                except ValueError:
+                    raise FormatError("Could not parse the coefficient")
+
+        self.coefficient = self.coefficient * sign
+        logging.debug("Coefficient parsed: %s", type(self.coefficient))
+
         self.varipart = x[sep:]
 
         if "^" in self.varipart:
@@ -340,10 +368,21 @@ class Term:
 
     @property
     def face(self) -> str:
+        c = self.coefficient
         if self.coefficient.q == 1:
-            return f"{self.coefficient.p}x^{self.power}"
+            c = self.coefficient.p
+        if self.power == 0:
+            return f"{c}"
+        if self.coefficient.p == 1:
+            c = ""
+        if self.power == 1:
+            return f"{c}x"
         else:
-            return f"{self.coefficient}x^{self.power}"
+            return f"{c}x^{self.power}"
+
+
+    @staticmethod
+
 
     def is_equal(self, other: Term) -> bool:
         """
@@ -454,7 +493,6 @@ class Polynomial:
     def __init__(self,expression:str):
         allowed_symbols = ["+","-","*","/","^","(",")","[","]","|","0","1","2","3","4","5","6","7","8","9","x"]
         expression = expression.replace(" ", "")
-        expression = expression.replace("*", "")
         if "x" not in expression:
             raise FormatError(msg="THERE HAS TO BE ONE VARIABLE!?!!")
         for i in expression:
@@ -462,57 +500,9 @@ class Polynomial:
                 raise FormatError(msg="Formating of the given expression is not permitted in the grounds of the polynomials")
 
 
-        self.exp = expression
-        brac = [0,0]
-        sep = 0
-        parts = []
-        for t in range(len(self.exp)):
-            item = self.exp[t]
-            if item == "(":
-                brac[0] += 1
-            elif item == ")":
-                brac[1] += 1
-            elif item in ["+","-"] and brac[0] == brac[1]:
-                parts.append(self.exp[sep:t])
-                sep = t
-        parts.append(self.exp[sep:])
-
-        # logging.debug("The parts are: %s", parts)
-
-        terms = []
-        upt = []
-
-        for i in range(len(parts)):
-            part = parts[i]
-            if "(" not in part and ")" not in part:
-                try:
-                    terms.append(Term(part))
-                except FormatError:
-                    try:
-                        terms.append(Rat(part))
-                    except FormatError:
-                        pass
-
-            elif "(" in part and ")" in part:
-                upt.append(part)
-            else:
-                try:
-                    terms.append(Rat(part))
-                except FormatError:
-                    pass
-
-        # logging.debug("The terms are: %s", terms)
-        # logging.debug("The upt are: %s", upt)
-
-        if len(parts) != len(upt) + len(terms):
-            raise FormatError(msg="Terms Could not be processed")
-
-        if len(upt) != 0:
-            for item in upt:
-                terms.extend(Polynomial.exp_eval(item))
-
+        expression = Polynomial._clean(expression)
+        terms = Polynomial.exp_eval(expression)
         self.terms = Term.arrange(Polynomial.shorten(terms))
-
 
     @property
     def face(self) -> str:
@@ -547,143 +537,168 @@ class Polynomial:
         return result
 
     @staticmethod
-    def exp_eval(item: str) -> list[Term]:
+    def _clean(expr: str) -> str:
         """
-            Simplifies a given expression by multiplying all the brackets.
-            :param item: an expression in form of a string
-            :return: a list of terms after all the multiplication of brackets and addition of terms.
-            """
-        # removing spaces to avoid later errors
-        item = item.replace(" ", "")  # expression
-        things = []  # list of the terms in the form of strings
-        mult = []  # list of the terms in the form Term objects and lists of Term objects
-        brac = [0, 0]  # a list to keep track of opened and closed brackets
-        sep = 0  # variable to store the index which separates the terms
+        Cleans the expression by handling unary minus signs and removing redundant operators.
+        :param expr: The expression string to be cleaned.
+        :return: The cleaned expression string.
+        """
+        while any(x in expr for x in ("++", "--", "+-", "-+", "*+", "/+")):
+            expr = expr.replace("++", "+")
+            expr = expr.replace("--", "+")
+            expr = expr.replace("+-", "-")
+            expr = expr.replace("-+", "-")
+            expr = expr.replace("*+", "*")
+            expr = expr.replace("/+", "/")
+        prev = ""
+        point = len(expr)
+        for i, sym in enumerate(expr):
+            if prev + sym == "*-":
+                depth = 0
+                rat_depth = 0
+                for j, ch in enumerate(expr[i + 1:]):
+                    if ch == "(":
+                        depth += 1
+                    elif ch == ")":
+                        depth -= 1
+                    elif ch == "[":
+                        rat_depth += 1
+                    elif ch == "]":
+                        rat_depth -= 1
+                    if depth == 0 and rat_depth == 0 and ch in "+-":
+                        print(j, ch)
+                        point = j + i + 1
+                        print(point)
+                        break
+                expr = expr[:i] + "(" + expr[i:point] + ")" + expr[point:]
+            prev = sym
+        while "(-(" in expr:
+            expr = expr.replace("(-(", "(-1*(")
+        if expr[0:2] == "-(":
+            expr = "-1*(" + expr[2:]
 
-        # separating the string based on brackets.
-        for i in range(len(item)):
-            # checking if the bracket is opening
-            if item[i] == "(":
-                # if all previously opened brackets are closed then do this
-                if brac[0] == brac[1]:
-                    things.append(item[sep:i])
-                    sep = i
-                    brac[0] += 1
-                # else if there is a bracket inside a bracket then just increase the number of opened brackets
-                # this will be picked up later to raise a "Too many layered brackets" error
+        return expr
+
+    @staticmethod
+    def _implicate_multiplication(expr: str) -> str:
+        """
+        Inserts '*' where multiplication is implied, e.g.:
+        (x+1)(x+2) -> (x+1)*(x+2)
+        2(x+1)     -> 2*(x+1)
+        x(x+1)     -> x*(x+1)
+        """
+        result = []
+        prev = ""
+
+        for ch in expr:
+            if prev:
+                # cases like ")(", "x(", "2(", ")x", ")2"
+                if (
+                        (prev.isdigit() or prev == "x" or prev == ")")
+                        and (ch == "(" or ch == "x" or ch.isdigit())
+                ):
+                    result.append("*")
+            result.append(ch)
+            prev = ch
+
+        return "".join(result)
+
+    @staticmethod
+    def _single_layer_split(expr: str, ops: set[str]) -> list[str]:
+        """
+        Splits an expression at operators that are not inside any brackets.
+        """
+        parts = []
+        rat_depth = 0
+        depth = 0
+        start = 0
+        lead = ""
+
+        for i, ch in enumerate(expr):
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+            elif ch == "[":
+                rat_depth += 1
+            elif ch == "]":
+                rat_depth -= 1
+            elif ch in ops and depth == 0 and rat_depth == 0:
+                if expr[start:i] != "" and expr[start:i] not in ops:
+                    parts.append(lead + expr[start:i])
+
+                if ch == "-" and lead != "-":
+                    lead = "-"
+                elif ch == "-" and lead == "-":
+                    lead = ""
+                elif ch == "+" and lead == "-":
+                    lead = "-"
                 else:
-                    brac[0] += 1
-            # same if the brackets are being closed
-            elif item[i] == ")":
-                if brac[0] - 1 == brac[1]:
-                    things.append(item[sep:i + 1])
-                    sep = i + 1
-                    brac[1] += 1
-                else:
-                    brac[1] += 1
-        # if in the last there is a term outside the bracket, the following will add that
-        if sep != len(item):
-            things.append(item[sep:])
+                    lead = ""
+                start = i+1
 
-        if things[0] == "+":
-            things[0] = "1"
-        elif things[0] == "-":
-            things[0] = "-1"
+        parts.append(expr[start:])
+        return parts
 
-        logging.debug("The things are: %s", things)
-        # now we convert all the terms into Term objects
-        for tng in things:
-            if len(tng) == 0:
-                continue
-            tng = tng.replace(" ", "")
-            # removing ending brackets like if tng="(3x-4x^2)" then it will equal "3x-4x^2"
-            if tng[0] == "(" and tng[-1] == ")":
-                tng = tng[1:-1]
+    @staticmethod
+    def _remove_outer_brackets(expr: str) -> str:
+        if not expr:
+            return expr
 
-            dead = False  # variable to check if tng is an expression or a single term
-            # we try to convert to a Rat object just to check
-            try:
-                trl = Rat(tng)
-            # if it is not a rat object then we try Term object
-            except (FormatError, ValueError):
-                # we add the term object to the mult list
-                try:
-                    mult.append(Term(tng))
-                # if tng is not a term or a rat we set dead=True which later will be checked
-                except FormatError:
-                    dead = True
-            # if it was converted into Rat without error then we convert it into a term object with x raised to 0
-            else:
-                mult.append(Term(f"{str(trl)}x^0"))
+        expr = expr.strip()
+        if not (expr.startswith("(") and expr.endswith(")")):
+            return expr
 
-            # if it is neither term nor a rat then we check for brackets
-            if dead:
-                a = []  # this is the list that is later added to mult
-                # if there are brackets in tng that indicates that there were more than 1 layer of brackets
-                # as we don't want brackets inside brackets we raise an error
-                if "(" in tng or ")" in tng:
-                    raise FormatError("Too many layered brackets. Program can't handle.")
-                # once checked for layered brackets we separate tng based on + and -
-                # then we convert each one into a term and add all the terms in a list
-                # that list is added to mult
-                else:
-                    sep = 0
-                    # separation based on + and - signs
-                    for i in range(len(tng)):
-                        if tng[i] in ["+", "-"]:
-                            # checking if it is a term
-                            try:
-                                a.append(Term(tng[sep:i]))
-                            # if not we try with a rat nd then convert to a term with x raised to 0
-                            except FormatError:
-                                try:
-                                    trial = Rat(tng[sep:i])
-                                # if term and rat both fail we raise an error
-                                except FormatError:
-                                    raise FormatError("Error occurred in comprehending expression")
-                                else:
-                                    a.append(Term(f"{str(trial)}x^0"))
-                            sep = i
-                    # when we separate based on + and - the code skips the last term
-                    # here we try to convert it into a term or a rat.
-                    # if neither works, we raise error
-                    try:
-                        a.append(Term(tng[sep:]))
-                    except FormatError:
-                        try:
-                            trial = Rat(tng[sep:])
-                        except FormatError:
-                            raise FormatError("Error occurred in comprehending expression")
-                        else:
-                            a.append(Term(f"{str(trial)}x^0"))
-                    mult.append(a)
+        depth = 0
+        for i, ch in enumerate(expr):
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
 
-        # now we have a list of things that are to be multiplied
-        # mult only contains two types of things either a term or a list of terms
-        # this loop repeats one once for every item in the list except the first one
-        # every time the loop is run the value of mult[0] is set to  product of mult[0] and mult[1]
-        num = len(mult) - 1
-        for _ in range(num):
-            # if mult[0] is a term then multiply and set mult[0] to the product
-            if isinstance(mult[0], Term):
-                mult[0] = mult[0].multiply(mult[1])  # type: ignore[call-overload]
-                # removing the number once it is multiplied
-                mult.remove(mult[1])
-            # if it is a list then loop through the list and multiply one by one.
-            elif isinstance(mult[0], list):
-                ans = []
-                for j in mult[0]:
-                    k = j.multiply(mult[1])
-                    if isinstance(k, Term):
-                        ans.append(j.multiply(mult[1]))
-                    else:
-                        ans += k
+            # If depth hits 0 before the last char → outer brackets don't wrap all
+            if depth == 0 and i != len(expr) - 1:
+                return expr
 
-                mult[0] = ans
-                # removing the list once it is multiplied
-                mult.remove(mult[1])
-        # mult is simplified using _shorten and then returned.
-        return Polynomial.shorten(mult[0])
+        # Fully wrapped
+        return expr[1:-1]
+
+    @staticmethod
+    def exp_eval(expr: str) -> list[Term]:
+        expr = expr.strip()
+        expr = Polynomial._implicate_multiplication(expr)
+        logging.debug("Evaluating expression: %s", expr)
+
+        # remove outer brackets
+        sign, expr = _leading_unary(expr)
+        expr = Polynomial._remove_outer_brackets(expr)
+
+        # + / -
+        parts = Polynomial._single_layer_split(expr, {"+", "-"})
+        if len(parts) > 1:
+            if sign == -1:
+                parts[0] = "-" + parts[0]
+            terms = []
+            for part in parts:
+                terms += Polynomial.exp_eval(part)
+            return Polynomial.shorten(terms)
+
+        # *
+        factors = Polynomial._single_layer_split(expr, {"*"})
+        if len(factors) > 1:
+            result = Polynomial.exp_eval(factors[0])
+            for f in factors[1:]:
+                result = Term.group_multiply(result, Polynomial.exp_eval(f))
+                result = Term(f"{sign}x^0").multiply(result)
+            return Polynomial.shorten(result)
+
+        # base case
+        logging.debug("Base case reached with expression: %s", expr)
+        try:
+            return [Term(expr)*sign]
+        except FormatError:
+            r = Rat(expr)
+            return [Term(f"{r}x^0")*sign]
 
     def add(self,other: int | Rat | Term | Polynomial) -> Polynomial:
         """
