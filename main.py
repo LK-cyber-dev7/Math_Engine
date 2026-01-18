@@ -17,22 +17,26 @@ class FormatError(Exception):
         super(FormatError, self).__init__(msg)
         self.msg = msg
 
-def ftr(n: float) -> Rat:
+def ftr(n: float | int | Decimal) -> Rat:
     """
     Converts a floating point number into a Rational number.
     :param n: a float
     :return: The equivalent Rational number in the form of a Rat object.
     """
     # getting number of decimal places
+    n = float(n)
     num = Decimal(str(n))
-    dp = num.as_tuple().exponent * -1
-    # converting the float to int by removing the point
-    p = int(n*(10**int(dp)))
-    # getting the denominator by raising 10 to the power equal to dp
-    q = int(10**int(dp))
+    sign, digits, exp = num.as_tuple()
+    if not isinstance(exp, int):
+        raise ValueError("Decimal exponent is not an integer. NaN or Infinity are not supported")
+    p = int("".join(map(str, digits)))
+    q = 10 ** (-exp) if exp <= 0 else 1
+
+    if sign:
+        p = -p
     return Rat(f"[{p}|{q}]").simplify()
 
-def ftr_rep(b: float, a: float =0):
+def ftr_rep(b: float, a: float = 0):
     """
     Converts a repeating floating point number into a Rational number.
     :param b: the repeating part in the form of a float.For example 0.123123... b=0.123
@@ -40,20 +44,27 @@ def ftr_rep(b: float, a: float =0):
     :return: The equivalent Rational number in the form of a Rat object.
     """
     if b <= 0 or b >= 1:
-        raise ValueError("b is out of range")
-    n1 = Decimal(str(a))
-    dp_a = int(n1.as_tuple().exponent * -1)
-    # getting the non repeat part
-    first = ftr(a)
-    # getting number of digits in b
-    n2 = Decimal(str(b))
-    dp_b = int(n2.as_tuple().exponent * -1)
-    # converting b to a rational number by setting numerator to the integer version of b and
-    # setting denominator to 9 repeating the same number of times as the number of digits in b
-    repeat = Rat(f"[{str(b).replace(".","")[1:]}|{"9"*dp_b+"0"*dp_a}]")
-    # returning a+b (non-repeating part plus the repeating part)
-    result = first+repeat
-    return result.simplify()
+        raise ValueError("b is out of range.The repeating part must be between 0 and 1")
+    a_dec = Decimal(str(a))
+    b_dec = Decimal(str(b))
+
+    # digits after decimal
+    m = a_dec.as_tuple().exponent
+    k = b_dec.as_tuple().exponent
+    if not isinstance(m, int) or not isinstance(k, int):
+        raise ValueError("Decimal exponent is not an integer. NaN or Infinity are not supported")
+
+    m = -m
+    k = -k
+
+    n1 = ftr(a_dec)
+
+    b_int = int(str(b_dec).replace(".", ""))
+    rep_num = Rat(f"[{b_int}|{10 ** k - 1}]")
+
+    shift = Rat(f"[1|{10 ** m}]")
+
+    return (n1 + rep_num * shift).simplify()
 
 def _parse_rat(x: str) -> tuple[int, int]:
     try:
@@ -112,7 +123,9 @@ class Rat:
 
         self.value = self.p/self.q
 
-        self.face = f"[{self.p}|{self.q}]"
+    @property
+    def face(self) -> str:
+        return f"[{self.p}|{self.q}]"
 
     def simplify(self) -> Rat:
         """
@@ -218,28 +231,46 @@ class Rat:
             return self.value ** power
 
     def __eq__(self, other):
-        tup = self._eql(other)
-        return tup[0].p == tup[1].p
+        if isinstance(other, Rat):
+            tup = self._eql(other)
+            return tup[0].p == tup[1].p
+        else:
+            return self.value == other
 
     def __lt__(self, other):
-        tup = self._eql(other)
-        return tup[0].p < tup[1].p
+        if isinstance(other, Rat):
+            tup = self._eql(other)
+            return tup[0].p < tup[1].p
+        else:
+            return self.value < other
 
     def __le__(self, other):
-        tup = self._eql(other)
-        return tup[0].p <= tup[1].p
+        if isinstance(other, Rat):
+            tup = self._eql(other)
+            return tup[0].p <= tup[1].p
+        else:
+            return self.value <= other
 
     def __gt__(self, other):
-        tup = self._eql(other)
-        return tup[0].p > tup[1].p
+        if isinstance(other, Rat):
+            tup = self._eql(other)
+            return tup[0].p > tup[1].p
+        else:
+            return self.value > other
 
     def __ge__(self, other):
-        tup = self._eql(other)
-        return tup[0].p >= tup[1].p
+        if isinstance(other, Rat):
+            tup = self._eql(other)
+            return tup[0].p >= tup[1].p
+        else:
+            return self.value >= other
 
     def __ne__(self, other):
-        tup = self._eql(other)
-        return tup[0].p != tup[1].p
+        if isinstance(other, Rat):
+            tup = self._eql(other)
+            return tup[0].p != tup[1].p
+        else:
+            return self.value != other
 
     def __getitem__(self, item):
         if isinstance(item, int):
@@ -305,7 +336,14 @@ class Term:
         else:
             self.power = 1
 
-        self.face = f"{self.coefficient}x^{self.power}"
+
+
+    @property
+    def face(self) -> str:
+        if self.coefficient.q == 1:
+            return f"{self.coefficient.p}x^{self.power}"
+        else:
+            return f"{self.coefficient}x^{self.power}"
 
     def is_equal(self, other: Term) -> bool:
         """
@@ -315,19 +353,25 @@ class Term:
         """
         return self.power == other.power
 
-    def __add__(self, other):
+    def __add__(self, other: Term) -> Term | None:
         if self.power == other.power:
             return Term(f"{self.coefficient + other.coefficient}x^{self.power}")
         else:
             return None
 
-    def __mul__(self, other):
+    def __radd__(self, other: Term) -> Term | None:
+        return self + other
+
+    def __mul__(self, other: int | Rat | Term) -> Term | None:
         if isinstance(other,Term):
             return Term(f"{self.coefficient * other.coefficient}x^{self.power+other.power}")
-        elif isinstance(other,Rat):
+        elif isinstance(other,Rat) or isinstance(other,int):
             return Term(f"{self.coefficient * other}x^{self.power}")
         else:
             return None
+
+    def __rmul__(self, other: int | Rat | Term) -> Term | None:
+        return self * other
 
     def multiply(self, others) -> list[Term]:
         """
@@ -343,6 +387,19 @@ class Term:
                 result.append(self * other)
             return result
 
+    @staticmethod
+    def group_multiply(terms1: list[Term], terms2: list[Term]) -> list[Term]:
+        """
+        Multiplies two lists of terms.
+        :param terms1: first list of terms
+        :param terms2: second list of terms
+        :return: a list of terms resulting from the multiplication
+        """
+        result = []
+        for term1 in terms1:
+            result.extend(term1.multiply(terms2))
+
+        return Term.arrange(Polynomial.shorten(result))
 
     def __sub__(self, other):
         if self.power == other.power:
@@ -352,6 +409,9 @@ class Term:
 
     def __truediv__(self, other):
         return Term(f"{self.coefficient / other.coefficient}x^{self.power - other.power}")
+
+    def __neg__(self):
+        return Term(f"{-self.coefficient}x^{self.power}")
 
     def evaluate(self,n):
         """
@@ -370,6 +430,12 @@ class Term:
         """
         return sorted(terms, key=lambda term: term.power, reverse=True)
 
+
+    def __abs__(self):
+        a = Term("1x^1")
+        a.coefficient = abs(self.coefficient)
+        a.power = self.power
+        return a
 
     def __str__(self):
         return self.face
@@ -445,10 +511,26 @@ class Polynomial:
             for item in upt:
                 terms.extend(Polynomial.exp_eval(item))
 
-        self.terms = Term.arrange(Polynomial._shorten(terms))
+        self.terms = Term.arrange(Polynomial.shorten(terms))
+
+
+    @property
+    def face(self) -> str:
+        result = ""
+        if self.terms[0].coefficient >= 0:
+            result += f"{abs(self.terms[0])}"
+        else:
+            result += f"-{abs(self.terms[0])}"
+        for term in self.terms[1:]:
+            if term.coefficient >= 0:
+                result += f" + {abs(term)}"
+            else:
+                result += f" - {abs(term)}"
+
+        return result
 
     @staticmethod
-    def _shorten(nums:list[Term]) -> list[Term]:
+    def shorten(nums:list[Term]) -> list[Term]:
         """
             Simplifies a given list of terms by adding terms with same power.
             :param nums: a list of terms
@@ -601,8 +683,72 @@ class Polynomial:
                 # removing the list once it is multiplied
                 mult.remove(mult[1])
         # mult is simplified using _shorten and then returned.
-        return Polynomial._shorten(mult[0])
+        return Polynomial.shorten(mult[0])
 
+    def add(self,other: int | Rat | Term | Polynomial) -> Polynomial:
+        """
+        Adds two polynomials or a polynomial with a term or a rational number.
+        :param other: A polynomial, term or rational number.
+        :return: The sum in form of a Polynomial object.
+        """
+        if isinstance(other, Polynomial):
+            new_terms = self.terms + other.terms
+        elif isinstance(other, Term):
+            new_terms = self.terms + [other]
+        elif isinstance(other, Rat) or isinstance(other, int):
+            new_terms = self.terms + [Term(f"{other}x^0")]
+        else:
+            raise TypeError("Unsupported type for addition with Polynomial")
+
+        simplified_terms = Polynomial.shorten(new_terms)
+        result_poly = Polynomial("0")
+        result_poly.terms = Term.arrange(simplified_terms)
+        return result_poly
+
+    def __add__(self, other: int | Rat | Term | Polynomial) -> Polynomial:
+        return self.add(other)
+
+    def __radd__(self, other: int | Rat | Term | Polynomial) -> Polynomial:
+        return self.add(other)
+
+    def multiply(self, other: int | Rat | Term | Polynomial) -> Polynomial:
+        if isinstance(other, Polynomial):
+            new_terms = Term.group_multiply(self.terms, other.terms)
+            result_poly = Polynomial("0")
+            result_poly.terms = Term.arrange(new_terms)
+            return result_poly
+        elif isinstance(other, Term):
+            new_terms = Term.group_multiply(self.terms, [other])
+            result_poly = Polynomial("0")
+            result_poly.terms = Term.arrange(Polynomial.shorten(new_terms))
+            return result_poly
+        elif isinstance(other, Rat) or isinstance(other, int):
+            new_terms = Term.group_multiply(self.terms, [Term(f"{other}x^0")])
+            result_poly = Polynomial("0")
+            result_poly.terms = Term.arrange(Polynomial.shorten(new_terms))
+            return result_poly
+        else:
+            raise TypeError("Unsupported type for multiplication with Polynomial")
+
+    def __mul__(self, other: int | Rat | Term | Polynomial) -> Polynomial:
+        return self.multiply(other)
+
+    def __rmul__(self, other: int | Rat | Term | Polynomial) -> Polynomial:
+        return self.multiply(other)
+
+    def __neg__(self) -> Polynomial:
+        return self.multiply(-1)
+
+    def subtract(self, other: int | Rat | Term | Polynomial) -> Polynomial:
+        return self.add(-other)
+
+    def __sub__(self, other: int | Rat | Term | Polynomial) -> Polynomial:
+        return self.subtract(other)
+
+    def __str__(self):
+        return self.face
+    def __repr__(self):
+        return self.face
 
 if __name__ == "__main__":
     print("This is a module for rational numbers, terms and polynomials.")
