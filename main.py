@@ -3,9 +3,11 @@ This module can be used for working with rational numbers, terms, and polynomial
 """
 # imports
 from __future__ import annotations
+import logging
 import math
 from decimal import Decimal
 
+logging.basicConfig(level=logging.DEBUG)
 
 class FormatError(Exception):
     """
@@ -158,7 +160,7 @@ class Rat:
         """
         return Rat(f"[{self.p*n}|{self.q*n}]")
 
-    def eql(self,other: Rat) -> tuple[Rat, Rat]:
+    def _eql(self, other: Rat) -> tuple[Rat, Rat]:
         """
         Returns a tuple of the given rational number and self with same denominator.
         :param other: The other rational number.
@@ -216,27 +218,27 @@ class Rat:
             return self.value ** power
 
     def __eq__(self, other):
-        tup = self.eql(other)
+        tup = self._eql(other)
         return tup[0].p == tup[1].p
 
     def __lt__(self, other):
-        tup = self.eql(other)
+        tup = self._eql(other)
         return tup[0].p < tup[1].p
 
     def __le__(self, other):
-        tup = self.eql(other)
+        tup = self._eql(other)
         return tup[0].p <= tup[1].p
 
     def __gt__(self, other):
-        tup = self.eql(other)
+        tup = self._eql(other)
         return tup[0].p > tup[1].p
 
     def __ge__(self, other):
-        tup = self.eql(other)
+        tup = self._eql(other)
         return tup[0].p >= tup[1].p
 
     def __ne__(self, other):
-        tup = self.eql(other)
+        tup = self._eql(other)
         return tup[0].p != tup[1].p
 
     def __getitem__(self, item):
@@ -359,158 +361,21 @@ class Term:
         """
         return self.coefficient*(n**self.power)
 
+    @staticmethod
+    def arrange(terms: list[Term]) -> list[Term]:
+        """
+        Arranges a given list of terms in decreasing order of power.
+        :param terms: a list of terms
+        :return: a list of terms arranged in decreasing order of power
+        """
+        return sorted(terms, key=lambda term: term.power, reverse=True)
+
+
     def __str__(self):
         return self.face
 
-def _shorten(nums:list[Term]) -> list[Term]:
-    """
-    Simplifies a given list of terms by adding terms with same power.
-    :param nums: a list of terms
-    :return: a simplified list of terms with all terms having unique powers
-    """
-    powers = {}
-    for num in nums:
-        if num.power not in powers:
-            powers[num.power] = num
-        else:
-            powers[num.power] += num
-
-    result = [powers[key] for key in powers]
-    return result
-
-def exp_eval(item: str) -> list[Term]:
-    """
-    Simplifies a given expression by multiplying all the brackets.
-    :param item: an expression in form of a string
-    :return: a list of terms after all the multiplication of brackets and addition of terms.
-    """
-    # removing spaces to avoid later errors
-    item = item.replace(" ","") # expression
-    things = [] # list of the terms in the form of strings
-    mult = [] # list of the terms in the form Term objects and lists of Term objects
-    brac = [0, 0] # a list to keep track of opened and closed brackets
-    sep = 0 # variable to store the index which separates the terms
-
-    # separating the string based on brackets.
-    for i in range(len(item)):
-        # checking if the bracket is opening
-        if item[i] == "(":
-            # if all previously opened brackets are closed then do this
-            if brac[0] == brac[1]:
-                things.append(item[sep:i])
-                sep = i
-                brac[0] += 1
-            # else if there is a bracket inside a bracket then just increase the number of opened brackets
-            # this will be picked up later to raise a "Too many layered brackets" error
-            else:
-                brac[0] += 1
-        # same if the brackets are being closed
-        elif item[i] == ")":
-            if brac[0] - 1 == brac[1]:
-                things.append(item[sep:i+1])
-                sep = i+1
-                brac[1] += 1
-            else:
-                brac[1] += 1
-    # if in the last there is a term outside the bracket, the following will add that
-    if sep != len(item):
-        things.append(item[sep:])
-
-    # now we convert all the terms into Term objects
-    for tng in things:
-        if len(tng) == 0:
-            continue
-        tng = tng.replace(" ","")
-        # removing ending brackets like if tng="(3x-4x^2)" then it will equal "3x-4x^2"
-        if tng[0] == "(" and tng[-1] == ")":
-            tng = tng[1:-1]
-
-        dead = False # variable to check if tng is an expression or a single term
-        # we try to convert to a Rat object just to check
-        try:
-            trl = Rat(tng)
-        # if it is not a rat object then we try Term object
-        except (FormatError, ValueError):
-            # we add the term object to the mult list
-            try:
-                mult.append(Term(tng))
-            # if tng is not a term or a rat we set dead=True which later will be checked
-            except FormatError:
-                dead = True
-        # if it was converted into Rat without error then we convert it into a term object with x raised to 0
-        else:
-            mult.append(Term(f"{str(trl)}x^0"))
-
-
-        # if it is neither term nor a rat then we check for brackets
-        if dead:
-            a = [] # this is the list that is later added to mult
-            # if there are brackets in tng that indicates that there were more than 1 layer of brackets
-            # as we don't want brackets inside brackets we raise an error
-            if "(" in tng or ")" in tng:
-                raise FormatError("Too many layered brackets. Program can't handle.")
-            # once checked for layered brackets we separate tng based on + and -
-            # then we convert each one into a term and add all the terms in a list
-            # that list is added to mult
-            else:
-                sep = 0
-                # separation based on + and - signs
-                for i in range(len(tng)):
-                    if tng[i] in ["+","-"]:
-                        # checking if it is a term
-                        try:
-                            a.append(Term(tng[sep:i]))
-                        # if not we try with a rat nd then convert to a term with x raised to 0
-                        except FormatError:
-                            try:
-                                trial = Rat(tng[sep:i])
-                            # if term and rat both fail we raise an error
-                            except FormatError:
-                                raise FormatError("Error occurred in initializing polynomial")
-                            else:
-                                a.append(Term(f"{str(trial)}x^0"))
-                        sep = i
-                # when we separate based on + and - the code skips the last term
-                # here we try to convert it into a term or a rat.
-                # if neither works, we raise error
-                try:
-                    a.append(Term(tng[sep:]))
-                except FormatError:
-                    try:
-                        trial = Rat(tng[sep:])
-                    except FormatError:
-                        raise FormatError("Error occurred in initializing polynomial")
-                    else:
-                        a.append(Term(f"{str(trial)}x^0"))
-                mult.append(a)
-
-    # now we have a list of things that are to be multiplied
-    # mult only contains two types of things either a term or a list of terms
-    # this loop repeats one once for every item in the list except the first one
-    # every time the loop is run the value of mult[0] is set to  product of mult[0] and mult[1]
-    num = len(mult)-1
-    for _ in range(num):
-        # if mult[0] is a term then multiply and set mult[0] to the product
-        if isinstance(mult[0],Term):
-            mult[0] = mult[0].multiply(mult[1])
-            # removing the number once it is multiplied
-            mult.remove(mult[1])
-        # if it is a list then loop through the list and multiply one by one.
-        elif isinstance(mult[0],list):
-            ans = []
-            for j in mult[0]:
-                k = j.multiply(mult[1])
-                if isinstance(k,Term):
-                    ans.append(j.multiply(mult[1]))
-                else:
-                    ans += k
-
-
-            mult[0] = ans
-            # removing the list once it is multiplied
-            mult.remove(mult[1])
-    # mult is simplified using _shorten and then returned.
-    return _shorten(mult[0])
+    def __repr__(self):
+        return self.face
 
 class Polynomial:
     """
@@ -546,6 +411,8 @@ class Polynomial:
                 sep = t
         parts.append(self.exp[sep:])
 
+        # logging.debug("The parts are: %s", parts)
+
         terms = []
         upt = []
 
@@ -568,10 +435,175 @@ class Polynomial:
                 except FormatError:
                     pass
 
+        # logging.debug("The terms are: %s", terms)
+        # logging.debug("The upt are: %s", upt)
+
         if len(parts) != len(upt) + len(terms):
             raise FormatError(msg="Terms Could not be processed")
 
         if len(upt) != 0:
             for item in upt:
-                pass
+                terms.extend(Polynomial.exp_eval(item))
 
+        self.terms = Term.arrange(Polynomial._shorten(terms))
+
+    @staticmethod
+    def _shorten(nums:list[Term]) -> list[Term]:
+        """
+            Simplifies a given list of terms by adding terms with same power.
+            :param nums: a list of terms
+            :return: a simplified list of terms with all terms having unique powers
+            """
+        powers = {}
+        for num in nums:
+            if num.power not in powers:
+                powers[num.power] = num
+            else:
+                powers[num.power] += num
+
+        result = [powers[key] for key in powers]
+        return result
+
+    @staticmethod
+    def exp_eval(item: str) -> list[Term]:
+        """
+            Simplifies a given expression by multiplying all the brackets.
+            :param item: an expression in form of a string
+            :return: a list of terms after all the multiplication of brackets and addition of terms.
+            """
+        # removing spaces to avoid later errors
+        item = item.replace(" ", "")  # expression
+        things = []  # list of the terms in the form of strings
+        mult = []  # list of the terms in the form Term objects and lists of Term objects
+        brac = [0, 0]  # a list to keep track of opened and closed brackets
+        sep = 0  # variable to store the index which separates the terms
+
+        # separating the string based on brackets.
+        for i in range(len(item)):
+            # checking if the bracket is opening
+            if item[i] == "(":
+                # if all previously opened brackets are closed then do this
+                if brac[0] == brac[1]:
+                    things.append(item[sep:i])
+                    sep = i
+                    brac[0] += 1
+                # else if there is a bracket inside a bracket then just increase the number of opened brackets
+                # this will be picked up later to raise a "Too many layered brackets" error
+                else:
+                    brac[0] += 1
+            # same if the brackets are being closed
+            elif item[i] == ")":
+                if brac[0] - 1 == brac[1]:
+                    things.append(item[sep:i + 1])
+                    sep = i + 1
+                    brac[1] += 1
+                else:
+                    brac[1] += 1
+        # if in the last there is a term outside the bracket, the following will add that
+        if sep != len(item):
+            things.append(item[sep:])
+
+        if things[0] == "+":
+            things[0] = "1"
+        elif things[0] == "-":
+            things[0] = "-1"
+
+        logging.debug("The things are: %s", things)
+        # now we convert all the terms into Term objects
+        for tng in things:
+            if len(tng) == 0:
+                continue
+            tng = tng.replace(" ", "")
+            # removing ending brackets like if tng="(3x-4x^2)" then it will equal "3x-4x^2"
+            if tng[0] == "(" and tng[-1] == ")":
+                tng = tng[1:-1]
+
+            dead = False  # variable to check if tng is an expression or a single term
+            # we try to convert to a Rat object just to check
+            try:
+                trl = Rat(tng)
+            # if it is not a rat object then we try Term object
+            except (FormatError, ValueError):
+                # we add the term object to the mult list
+                try:
+                    mult.append(Term(tng))
+                # if tng is not a term or a rat we set dead=True which later will be checked
+                except FormatError:
+                    dead = True
+            # if it was converted into Rat without error then we convert it into a term object with x raised to 0
+            else:
+                mult.append(Term(f"{str(trl)}x^0"))
+
+            # if it is neither term nor a rat then we check for brackets
+            if dead:
+                a = []  # this is the list that is later added to mult
+                # if there are brackets in tng that indicates that there were more than 1 layer of brackets
+                # as we don't want brackets inside brackets we raise an error
+                if "(" in tng or ")" in tng:
+                    raise FormatError("Too many layered brackets. Program can't handle.")
+                # once checked for layered brackets we separate tng based on + and -
+                # then we convert each one into a term and add all the terms in a list
+                # that list is added to mult
+                else:
+                    sep = 0
+                    # separation based on + and - signs
+                    for i in range(len(tng)):
+                        if tng[i] in ["+", "-"]:
+                            # checking if it is a term
+                            try:
+                                a.append(Term(tng[sep:i]))
+                            # if not we try with a rat nd then convert to a term with x raised to 0
+                            except FormatError:
+                                try:
+                                    trial = Rat(tng[sep:i])
+                                # if term and rat both fail we raise an error
+                                except FormatError:
+                                    raise FormatError("Error occurred in comprehending expression")
+                                else:
+                                    a.append(Term(f"{str(trial)}x^0"))
+                            sep = i
+                    # when we separate based on + and - the code skips the last term
+                    # here we try to convert it into a term or a rat.
+                    # if neither works, we raise error
+                    try:
+                        a.append(Term(tng[sep:]))
+                    except FormatError:
+                        try:
+                            trial = Rat(tng[sep:])
+                        except FormatError:
+                            raise FormatError("Error occurred in comprehending expression")
+                        else:
+                            a.append(Term(f"{str(trial)}x^0"))
+                    mult.append(a)
+
+        # now we have a list of things that are to be multiplied
+        # mult only contains two types of things either a term or a list of terms
+        # this loop repeats one once for every item in the list except the first one
+        # every time the loop is run the value of mult[0] is set to  product of mult[0] and mult[1]
+        num = len(mult) - 1
+        for _ in range(num):
+            # if mult[0] is a term then multiply and set mult[0] to the product
+            if isinstance(mult[0], Term):
+                mult[0] = mult[0].multiply(mult[1])  # type: ignore[call-overload]
+                # removing the number once it is multiplied
+                mult.remove(mult[1])
+            # if it is a list then loop through the list and multiply one by one.
+            elif isinstance(mult[0], list):
+                ans = []
+                for j in mult[0]:
+                    k = j.multiply(mult[1])
+                    if isinstance(k, Term):
+                        ans.append(j.multiply(mult[1]))
+                    else:
+                        ans += k
+
+                mult[0] = ans
+                # removing the list once it is multiplied
+                mult.remove(mult[1])
+        # mult is simplified using _shorten and then returned.
+        return Polynomial._shorten(mult[0])
+
+
+if __name__ == "__main__":
+    print("This is a module for rational numbers, terms and polynomials.")
+    print("Import this module to use its classes and methods.")
