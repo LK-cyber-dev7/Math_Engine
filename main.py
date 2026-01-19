@@ -82,17 +82,32 @@ class Rat(Rational):
     p represents the numerator and q represents the denominator.
     Objects of Rat can be used as numbers for comparison,assignment and arithmetic operators.
 
-    Class methods:
-        simplify
-        reciprocal
-        add
-        multiply
-        produce
-        eql
+    Class Properties:
+        - p
+        - q
+        - numerator
+        - denominator
+        - face
+        - value
+
+    Instance methods:
+        - simplify
+        - reciprocal
+        - add
+        - multiply
+        - produce
+        - eql
+        - is_integer
+        - as_tuple
 
     Static methods:
-        ftr
-        ftr_rep
+        - ftr
+        - ftr_rep
+        - frac_to_rat
+        - rat_to_frac
+
+    Class Methods:
+        - from_float
 
     """
 
@@ -461,11 +476,18 @@ class Term:
     To create an object of Term pass a string which includes a variable x.
     Coefficients can be int or Rat while powers of x can only be int.To represent exponentiation use '^' instead of '**'
 
-    Term methods:
-    is_equal
-    simplify
-    multiply
-    evaluate
+    Class Properties:
+        - face
+
+    Instance methods:
+        - is_equal
+        - simplify
+        - multiply
+        - evaluate
+
+    Static methods:
+        - group_multiply
+        - arrange
     """
 
     def __init__(self, x: str):
@@ -519,10 +541,6 @@ class Term:
             return f"{c}x"
         else:
             return f"{c}x^{self.power}"
-
-
-    @staticmethod
-
 
     def is_equal(self, other: Term) -> bool:
         """
@@ -628,8 +646,20 @@ class Polynomial:
     This class is for working with mathematical polynomials.
     Note: Polynomials cannot have division of two expressions.
 
-    class methods:
-    -
+    Class Methods:
+        - zero
+
+    Class Properties:
+        - face
+
+    Instance Methods:
+        - add
+        - multiply
+        - subtract
+
+    Static Methods:
+        - shorten
+        - exp_eval
     """
     def __init__(self,expression: str | int | Rat, var: str = "x"):
         if len(var) != 1 or not var.isalpha():
