@@ -33,7 +33,7 @@ and conversions while preserving exact rational values.
 ### Example Usage
 
 ```python
-from math_engine import Rat
+from main import Rat
 from fractions import Fraction
 
 # Create Rat objects
@@ -58,6 +58,7 @@ print(r1.denominator)   # 4
 # Interoperability with Fraction
 f = Fraction(3, 4)
 r_from_f = Rat(f.numerator, f.denominator)
+```
 
 ## Tech Stack
 - Python 3
