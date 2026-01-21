@@ -503,9 +503,14 @@ class Term:
         - from_parts
     """
 
-    __slots__ = ("_power", "_coefficient")
+    __slots__ = ("_power", "_coefficient", "_var")
 
-    def __init__(self, x: str):
+    def __init__(self, x: str, var: str = "x"):
+        var = var.lower().strip()
+        if len(var) != 1 or not var.isalpha():
+            raise FormatError("only alphabets are allowed as variables")
+        self._var = var
+        x = x.replace(var, "x")
         x = str(x).strip().lower()
         for i in x:
             if i in ["(",")","{","}"]:
@@ -565,9 +570,13 @@ class Term:
         if self._coefficient == 1:
             c = ""
         if self._power == 1:
-            return f"{c}x"
+            return f"{c}{self._var}"
         else:
-            return f"{c}x^{self._power}"
+            return f"{c}{self._var}^{self._power}"
+
+    @property
+    def var(self) -> str:
+        return self._var
 
     @property
     def degree(self) -> int:
@@ -594,7 +603,7 @@ class Term:
         self._normalize()
 
     @classmethod
-    def from_parts(cls, coefficient: int | Rat, power: int) -> Term:
+    def from_parts(cls, coefficient: int | Rat, power: int, var: str = "x") -> Term:
         if not isinstance(coefficient, Rat):
             coefficient = Rat(coefficient)
 
@@ -604,6 +613,10 @@ class Term:
         if power < 0:
             raise ValueError("Negative powers are prohibited")
 
+        var = var.lower().strip()
+        if len(var) != 1 or not var.isalpha():
+            raise FormatError("only alphabets are allowed as variables")
+
         # normalize zero
         if coefficient == 0:
             power = 0
@@ -611,6 +624,7 @@ class Term:
         term = cls("1x")
         term._coefficient = coefficient
         term._power = power
+        term._var = var
         return term
 
     @staticmethod
@@ -657,6 +671,9 @@ class Term:
         if self._coefficient == 0:
             self._power = 0
 
+    def is_constant(self) -> bool:
+        return self._power == 0
+
     def is_like(self, other: Term) -> bool:
         """
         Returns True if both the terms are of same power
@@ -695,7 +712,7 @@ class Term:
         if not isinstance(other, Term):
             return NotImplemented
         if self._power == other._power:
-            result = Term.from_parts(self._coefficient + other._coefficient, self._power)
+            result = Term.from_parts(self._coefficient + other._coefficient, self._power,  var=self._var)
             result._normalize()
             return result
         else:
@@ -708,9 +725,9 @@ class Term:
 
     def __mul__(self, other: int | Rat | Term) -> Term:
         if isinstance(other,Term):
-            return Term.from_parts(self._coefficient * other._coefficient, self._power + other._power)
+            return Term.from_parts(self._coefficient * other._coefficient, self._power + other._power, var=self._var)
         elif isinstance(other,Rat) or isinstance(other,int):
-            return Term.from_parts(self._coefficient * other, self._power)
+            return Term.from_parts(self._coefficient * other, self._power, var=self._var)
         else:
             raise TypeError(f"Cannot multiply a Term object with {type(other)}")
 
@@ -721,7 +738,7 @@ class Term:
         if not isinstance(other, Term):
             return NotImplemented
         if self._power == other._power:
-            result = Term.from_parts(self._coefficient - other._coefficient, self._power)
+            result = Term.from_parts(self._coefficient - other._coefficient, self._power, var=self._var)
             result._normalize()
             return result
         else:
@@ -733,11 +750,11 @@ class Term:
                 raise ZeroDivisionError
             if other._power > self._power:
                 raise ValueError("Operation will result in a negative power")
-            return Term.from_parts(self._coefficient / other._coefficient, self._power - other._power)
+            return Term.from_parts(self._coefficient / other._coefficient, self._power - other._power, var=self._var)
         elif isinstance(other, int) or isinstance(other, Rat):
             if other == 0:
                 raise ZeroDivisionError
-            return Term.from_parts(self._coefficient / other, self._power)
+            return Term.from_parts(self._coefficient / other, self._power, var=self._var)
         else:
             raise TypeError(f"Cannot divide a Term object with {type(other)}")
 
@@ -769,19 +786,19 @@ class Term:
         return self.__gt__(other) or self.__eq__(other)
 
     def __neg__(self) -> Term:
-        return Term.from_parts(self._coefficient * -1, self._power)
+        return Term.from_parts(self._coefficient * -1, self._power, var=self._var)
 
     def __pow__(self, n) -> Term:
         if not isinstance(n, int) or n < 0:
             return NotImplemented
         if n == 0:
-            return Term.from_parts(1, 0)
+            return Term.from_parts(1, 0, var=self._var)
         if self.is_zero():
-            return Term.from_parts(0, 0)
-        return Term.from_parts(self._coefficient ** n, self._power * n)
+            return Term.from_parts(0, 0, var=self._var)
+        return Term.from_parts(self._coefficient ** n, self._power * n, var=self._var)
 
     def __abs__(self) -> Term:
-        return Term.from_parts(abs(self._coefficient), self._power)
+        return Term.from_parts(abs(self._coefficient), self._power, var=self._var)
 
     def __call__(self, n):
         return self.evaluate(n)

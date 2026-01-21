@@ -69,7 +69,7 @@ It is designed for use in polynomials and algebraic expressions.
 - **Components**: Each term has a coefficient (`Rat`) and a power (`int`).
 - **Arithmetic Operations**: Supports addition, subtraction, multiplication, division (when powers allow), and exponentiation.
 - **Comparisons**: Terms can be compared by power or coefficient.
-- **Properties**: `.coefficient`, `.power`, `.var`, `.is_constant`.
+- **Properties**: `.coefficient`, `.power`, `.var`.
 - **Simplification**: Automatically simplifies terms with zero coefficients or powers of zero.
 - **String Representation**: Displays in standard algebraic notation (e.g., `3/4*x^2`).
 - **Interoperability**: Can be used directly in polynomials and combined with other `Term` objects.
@@ -79,9 +79,9 @@ It is designed for use in polynomials and algebraic expressions.
 from main import Term, Rat
 
 # Create Term objects
-t1 = Term(Rat("[3|4]"), "x", 2)  # 3/4 * x^2
-t2 = Term(Rat(2), "x", 2)        # 2 * x^2
-t3 = Term(Rat(1), "y", 1)        # 1 * y
+t1 = Term("[3|4]x^2")  # 3/4 * x^2
+t2 = Term("2a^2", var='a')        # 2 * a^2
+t3 = Term.from_parts(Rat(1), 1, var='y')        # 1 * y
 
 # Arithmetic
 sum_term = t1 + t2               # Combines like terms
@@ -92,7 +92,10 @@ pow_term = t1 ** 2                # Raises term to power
 print(t1.coefficient)            # Rat("[3|4]")
 print(t1.power)                  # 2
 print(t1.var)                    # 'x'
-print(t1.is_constant)            # False
+
+# Checks
+print(t1.is_constant())            # False
+print(t1.is_zero())                # False 
 
 # String representation
 print(t1)                        # '3/4*x^2'
