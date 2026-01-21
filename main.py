@@ -120,6 +120,12 @@ class Rat(Rational):
             self._p, self._q = x, q
         elif q is not None and not isinstance(x, int):
             raise TypeError("p and q must be an integer")
+        elif q is None and isinstance(x, float):
+            tmp = Rat.ftr(x)
+            self._p = tmp._p
+            self._q = tmp._q
+        elif q is None and isinstance(x, Rat):
+            self._p, self._q = x._p, x._q
         else:
             self._p, self._q = _parse_rat(str(x))
 
@@ -127,6 +133,8 @@ class Rat(Rational):
 
     @property
     def face(self) -> str:
+        if self._q == 1:
+            return f"{self._p}"
         return f"[{self._p}|{self._q}]"
 
     @property
@@ -370,7 +378,7 @@ class Rat(Rational):
         if isinstance(power, int):
             if power < 0:
                 return self.reciprocal() ** -power
-            return Rat(f"[{int(self._p ** power)}|{int(self._q ** power)}]")
+            return Rat(int(self._p ** power),int(self._q ** power))
         else:
             return self.value ** power
 
@@ -478,112 +486,132 @@ class Term:
 
     Class Properties:
         - face
+        - degree
 
     Instance methods:
-        - is_equal
-        - simplify
+        - is_like
+        - is_zero
         - multiply
         - evaluate
 
     Static methods:
         - group_multiply
+        - shorten
         - arrange
+
+    Class Methods:
+        - from_parts
     """
 
+    __slots__ = ("_power", "_coefficient")
+
     def __init__(self, x: str):
+        x = str(x).strip().lower()
         for i in x:
             if i in ["(",")","{","}"]:
                 raise FormatError
 
-        if x.count("x") != 1:
-            raise FormatError
+        try:
+            self._coefficient = Rat(x)
+            self._power = 0
+            return
 
-        sign, x = _leading_unary(x)
+        except FormatError:
+            if x.count("x") != 1 or x.count("^") > 1:
+                raise FormatError
 
-        sep = x.index("x")
-        if x[0] == "x":
-            self.coefficient = Rat(1)
-        else:
-            try:
-                self.coefficient = Rat(x[:sep])
-            except FormatError:
+            sign, x = _leading_unary(x)
+
+            sep = x.index("x")
+            if x[0] == "x":
+                self._coefficient = Rat(1)
+            else:
                 try:
-                    self.coefficient = Rat.ftr(float(x[:sep]))
-                except ValueError:
-                    raise FormatError("Could not parse the coefficient")
+                    self._coefficient = Rat(x[:sep])
+                except FormatError:
+                    try:
+                        self._coefficient = Rat.ftr(float(x[:sep]))
+                    except ValueError:
+                        raise FormatError("Could not parse the coefficient")
 
-        self.coefficient = self.coefficient * sign
+            self._coefficient = self._coefficient * sign
 
-        self.variable_with_power = x[sep:]
+            variable_with_power = x[sep:]
 
-        if "^" in self.variable_with_power:
-            sep = self.variable_with_power.index("^")
-            self.power = int(self.variable_with_power[sep + 1:])
+            if "^" in variable_with_power:
+                sep = variable_with_power.index("^")
+                self._power = int(variable_with_power[sep + 1:])
 
-        elif x[-1] != "x":
-            raise FormatError
+            elif x[-1] != "x":
+                raise FormatError
 
-        else:
-            self.power = 1
+            else:
+                self._power = 1
 
+            if self._power < 0:
+                raise ValueError("Negative powers are prohibited")
 
+        self._normalize()
 
     @property
     def face(self) -> str:
-        c = str(self.coefficient)
-        if self.coefficient.q == 1:
-            c = str(self.coefficient.p)
-        if self.power == 0:
+        c = str(self._coefficient)
+        if self._coefficient.q == 1:
+            c = str(self._coefficient.p)
+        if self._coefficient == 0:
+            return "0"
+        if self._power == 0:
             return f"{c}"
-        if self.coefficient.p == 1:
+        if self._coefficient == 1:
             c = ""
-        if self.power == 1:
+        if self._power == 1:
             return f"{c}x"
         else:
-            return f"{c}x^{self.power}"
+            return f"{c}x^{self._power}"
 
-    def is_equal(self, other: Term) -> bool:
-        """
-        Returns True if both the terms are of same power
-        :param self:  The first term to be compared
-        :param other: The second term to be compared
-        :return: True if both terms are of same power otherwise False
-        """
-        return self.power == other.power
+    @property
+    def degree(self) -> int:
+        return self._power
 
-    def __add__(self, other: Term) -> Term:
-        if self.power == other.power:
-            return Term(f"{self.coefficient + other.coefficient}x^{self.power}")
-        else:
-            raise ValueError("Cannot add terms with different powers")
+    @property
+    def coefficient(self) -> Rat:
+        return self._coefficient
 
-    def __radd__(self, other: Term) -> Term:
-        return self + other
+    @coefficient.setter
+    def coefficient(self, value: Rat):
+        self._coefficient = value
+        self._normalize()
 
-    def __mul__(self, other: int | Rat | Term) -> Term:
-        if isinstance(other,Term):
-            return Term(f"{self.coefficient * other.coefficient}x^{self.power+other.power}")
-        elif isinstance(other,Rat) or isinstance(other,int):
-            return Term(f"{self.coefficient * other}x^{self.power}")
-        else:
-            raise TypeError(f"Cannot multiply a Term object with {type(other)}")
+    @property
+    def power(self) -> int:
+        return self._power
 
-    def __rmul__(self, other: int | Rat | Term) -> Term:
-        return self * other
+    @power.setter
+    def power(self, value: int):
+        if not isinstance(value, int) or value < 0:
+            raise ValueError("Power must be a positive integer")
+        self._power = value
+        self._normalize()
 
-    def multiply(self, others) -> list[Term]:
-        """
-        Used to multiply self with other term or a list of terms.
-        :param others: a term or a list of terms
-        :return: a list of terms resulting from the multiplication
-        """
-        if isinstance(others,Term) or isinstance(others,Rat):
-            return [self * others]
-        else:
-            result = []
-            for other in others:
-                result.append(self * other)
-            return result
+    @classmethod
+    def from_parts(cls, coefficient: int | Rat, power: int) -> Term:
+        if not isinstance(coefficient, Rat):
+            coefficient = Rat(coefficient)
+
+        if not isinstance(power, int):
+            raise TypeError("Power must be an int")
+
+        if power < 0:
+            raise ValueError("Negative powers are prohibited")
+
+        # normalize zero
+        if coefficient == 0:
+            power = 0
+
+        term = cls("1x")
+        term._coefficient = coefficient
+        term._power = power
+        return term
 
     @staticmethod
     def group_multiply(terms1: list[Term], terms2: list[Term]) -> list[Term]:
@@ -597,27 +625,24 @@ class Term:
         for term1 in terms1:
             result.extend(term1.multiply(terms2))
 
-        return Term.arrange(Polynomial.shorten(result))
+        return Term.arrange(Term.shorten(result))
 
-    def __sub__(self, other) -> Term:
-        if self.power == other.power:
-            return Term(f"{self.coefficient - other.coefficient}x^{self.power}")
-        else:
-            raise ValueError("Cannot subtract terms with different powers")
-
-    def __truediv__(self, other) -> Term:
-        return Term(f"{self.coefficient / other.coefficient}x^{self.power - other.power}")
-
-    def __neg__(self) -> Term:
-        return Term(f"{-self.coefficient}x^{self.power}")
-
-    def evaluate(self,n):
+    @staticmethod
+    def shorten(nums: list[Term]) -> list[Term]:
         """
-        Evaluates value of a term at x=n
-        :param n: value of x to evaluate
-        :return: the value of term at x=n
-        """
-        return self.coefficient*(n**self.power)
+            Simplifies a given list of terms by adding terms with same power.
+            :param nums: a list of terms
+            :return: a simplified list of terms with all terms having unique powers
+            """
+        powers: dict[int, Term] = {}
+
+        for num in nums:
+            if num._power not in powers:
+                powers[num._power] = Term.from_parts(num._coefficient, num._power)
+            else:
+                powers[num._power] = powers[num._power] + num
+
+        return list(powers.values())
 
     @staticmethod
     def arrange(terms: list[Term]) -> list[Term]:
@@ -628,12 +653,141 @@ class Term:
         """
         return sorted(terms, key=lambda term: term.power, reverse=True)
 
+    def _normalize(self) -> None:
+        if self._coefficient == 0:
+            self._power = 0
+
+    def is_like(self, other: Term) -> bool:
+        """
+        Returns True if both the terms are of same power
+        :param self:  The first term to be compared
+        :param other: The second term to be compared
+        :return: True if both terms are of same power otherwise False
+        """
+        if not isinstance(other, Term):
+            return False
+        return self._power == other._power
+
+    def multiply(self, others) -> list[Term]:
+        """
+        Used to multiply self with other term or a list of terms.
+        :param others: a term or a list of terms
+        :return: a list of terms resulting from the multiplication
+        """
+        if isinstance(others, (Term, Rat, int)):
+            return [self * others]
+        elif not isinstance(others, (list, tuple)):
+            raise TypeError("only list of terms is accepted")
+        return [self * other for other in others]
+
+    def evaluate(self,n):
+        """
+        Evaluates value of a term at x=n
+        :param n: value of x to evaluate. n can be Rat, int or float
+        :return: the value of term at x=n
+        """
+        return self._coefficient*(n ** self._power)
+
+    def is_zero(self) -> bool:
+        return self._coefficient == 0
+
+    def __add__(self, other: Term) -> Term:
+        if not isinstance(other, Term):
+            return NotImplemented
+        if self._power == other._power:
+            result = Term.from_parts(self._coefficient + other._coefficient, self._power)
+            result._normalize()
+            return result
+        else:
+            raise ValueError("Cannot add terms with different powers")
+
+    def __radd__(self, other) -> Term:
+        if other == 0:
+            return self
+        return NotImplemented
+
+    def __mul__(self, other: int | Rat | Term) -> Term:
+        if isinstance(other,Term):
+            return Term.from_parts(self._coefficient * other._coefficient, self._power + other._power)
+        elif isinstance(other,Rat) or isinstance(other,int):
+            return Term.from_parts(self._coefficient * other, self._power)
+        else:
+            raise TypeError(f"Cannot multiply a Term object with {type(other)}")
+
+    def __rmul__(self, other: int | Rat | Term) -> Term:
+        return self * other
+
+    def __sub__(self, other) -> Term:
+        if not isinstance(other, Term):
+            return NotImplemented
+        if self._power == other._power:
+            result = Term.from_parts(self._coefficient - other._coefficient, self._power)
+            result._normalize()
+            return result
+        else:
+            raise ValueError("Cannot subtract terms with different powers")
+
+    def __truediv__(self, other) -> Term:
+        if isinstance(other, Term):
+            if other.is_zero():
+                raise ZeroDivisionError
+            if other._power > self._power:
+                raise ValueError("Operation will result in a negative power")
+            return Term.from_parts(self._coefficient / other._coefficient, self._power - other._power)
+        elif isinstance(other, int) or isinstance(other, Rat):
+            if other == 0:
+                raise ZeroDivisionError
+            return Term.from_parts(self._coefficient / other, self._power)
+        else:
+            raise TypeError(f"Cannot divide a Term object with {type(other)}")
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, Term):
+            return False
+        return self._power == other._power and self._coefficient == other._coefficient
+
+    def __lt__(self, other) -> bool:
+        if not isinstance(other, Term):
+            return NotImplemented
+        elif self._power == other._power:
+            return self._coefficient < other._coefficient
+        else:
+            return self._power < other._power
+
+    def __gt__(self, other) -> bool:
+        if not isinstance(other, Term):
+            return NotImplemented
+        elif self._power == other._power:
+            return self._coefficient > other._coefficient
+        else:
+            return self._power > other._power
+
+    def __le__(self, other) -> bool:
+        return self.__lt__(other) or self.__eq__(other)
+
+    def __ge__(self, other) -> bool:
+        return self.__gt__(other) or self.__eq__(other)
+
+    def __neg__(self) -> Term:
+        return Term.from_parts(self._coefficient * -1, self._power)
+
+    def __pow__(self, n) -> Term:
+        if not isinstance(n, int) or n < 0:
+            return NotImplemented
+        if n == 0:
+            return Term.from_parts(1, 0)
+        if self.is_zero():
+            return Term.from_parts(0, 0)
+        return Term.from_parts(self._coefficient ** n, self._power * n)
 
     def __abs__(self) -> Term:
-        a = Term("1x^1")
-        a.coefficient = abs(self.coefficient)
-        a.power = self.power
-        return a
+        return Term.from_parts(abs(self._coefficient), self._power)
+
+    def __call__(self, n):
+        return self.evaluate(n)
+
+    def __bool__(self) -> bool:
+        return self._coefficient != 0
 
     def __str__(self) -> str:
         return self.face
@@ -683,7 +837,7 @@ class Polynomial:
 
         expression = Polynomial._clean(expression)
         terms = Polynomial.exp_eval(expression)
-        self.terms = Term.arrange(Polynomial.shorten(terms))
+        self.terms = Term.arrange(Term.shorten(terms))
 
     @classmethod
     def zero(cls):
@@ -705,23 +859,6 @@ class Polynomial:
                 result += f" - {abs(term)}"
 
         return result.replace("x", self.var)
-
-    @staticmethod
-    def shorten(nums:list[Term]) -> list[Term]:
-        """
-            Simplifies a given list of terms by adding terms with same power.
-            :param nums: a list of terms
-            :return: a simplified list of terms with all terms having unique powers
-            """
-        powers = {}
-        for num in nums:
-            if num.power not in powers:
-                powers[num.power] = num
-            else:
-                powers[num.power] += num
-
-        result = [powers[key] for key in powers]
-        return result
 
     @staticmethod
     def _clean(expr: str) -> str:
@@ -869,7 +1006,7 @@ class Polynomial:
             terms = []
             for part in parts:
                 terms += Polynomial.exp_eval(part)
-            return Polynomial.shorten(terms)
+            return Term.shorten(terms)
 
         # *
         factors = Polynomial._single_layer_split(expr, {"*"})
@@ -878,7 +1015,7 @@ class Polynomial:
             for f in factors[1:]:
                 result = Term.group_multiply(result, Polynomial.exp_eval(f))
                 result = Term(f"{sign}x^0").multiply(result)
-            return Polynomial.shorten(result)
+            return Term.shorten(result)
 
         # base case
         try:
@@ -902,7 +1039,7 @@ class Polynomial:
         else:
             raise TypeError("Unsupported type for addition with Polynomial")
 
-        simplified_terms = Polynomial.shorten(new_terms)
+        simplified_terms = Term.shorten(new_terms)
         result_poly = Polynomial("0")
         result_poly.terms = Term.arrange(simplified_terms)
         return result_poly
@@ -922,12 +1059,12 @@ class Polynomial:
         elif isinstance(other, Term):
             new_terms = Term.group_multiply(self.terms, [other])
             result_poly = Polynomial("0")
-            result_poly.terms = Term.arrange(Polynomial.shorten(new_terms))
+            result_poly.terms = Term.arrange(Term.shorten(new_terms))
             return result_poly
         elif isinstance(other, Rat) or isinstance(other, int):
             new_terms = Term.group_multiply(self.terms, [Term(f"{other}x^0")])
             result_poly = Polynomial("0")
-            result_poly.terms = Term.arrange(Polynomial.shorten(new_terms))
+            result_poly.terms = Term.arrange(Term.shorten(new_terms))
             return result_poly
         else:
             raise TypeError("Unsupported type for multiplication with Polynomial")

@@ -60,6 +60,43 @@ f = Fraction(3, 4)
 r_from_f = Rat(f.numerator, f.denominator)
 ```
 
+## Term Class
+
+The `Term` class represents a symbolic term of the form `coefficient * variable^power`.
+It is designed for use in polynomials and algebraic expressions.
+
+### Key Features
+- **Components**: Each term has a coefficient (`Rat`) and a power (`int`).
+- **Arithmetic Operations**: Supports addition, subtraction, multiplication, division (when powers allow), and exponentiation.
+- **Comparisons**: Terms can be compared by power or coefficient.
+- **Properties**: `.coefficient`, `.power`, `.var`, `.is_constant`.
+- **Simplification**: Automatically simplifies terms with zero coefficients or powers of zero.
+- **String Representation**: Displays in standard algebraic notation (e.g., `3/4*x^2`).
+- **Interoperability**: Can be used directly in polynomials and combined with other `Term` objects.
+
+### Example Usage
+```python
+from main import Term, Rat
+
+# Create Term objects
+t1 = Term(Rat("[3|4]"), "x", 2)  # 3/4 * x^2
+t2 = Term(Rat(2), "x", 2)        # 2 * x^2
+t3 = Term(Rat(1), "y", 1)        # 1 * y
+
+# Arithmetic
+sum_term = t1 + t2               # Combines like terms
+prod_term = t1 * t3              # Multiplies terms
+pow_term = t1 ** 2                # Raises term to power
+
+# Properties
+print(t1.coefficient)            # Rat("[3|4]")
+print(t1.power)                  # 2
+print(t1.var)                    # 'x'
+print(t1.is_constant)            # False
+
+# String representation
+print(t1)                        # '3/4*x^2'
+```
 ## Tech Stack
 - Python 3
 - Object-Oriented Programming
