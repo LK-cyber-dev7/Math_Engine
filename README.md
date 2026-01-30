@@ -100,39 +100,39 @@ print(t1.is_zero())                # False
 # String representation
 print(t1)                        # '3/4*x^2'
 ```
-Polynomial Class
+## Polynomial Class
 
 The Polynomial class represents a symbolic polynomial in one variable.
 It supports exact algebraic manipulation as well as numerical approximation
 for roots and extrema.
 
-Key Features
+### Key Features
 
-Symbolic representation using Term objects
+- Symbolic representation using Term objects
 
-Exact arithmetic via the Rat class
+- Exact arithmetic via the Rat class
 
-Differentiation & integration
+- Differentiation & integration
 
-Integer and rational root detection
+- Integer and rational root detection
 
-Numerical root & extrema approximation
+- Numerical root & extrema approximation
 
-Automatic simplification and ordering
+- Automatic simplification and ordering
 
-Core Capabilities
+### Core Capabilities
 
-Addition, subtraction, multiplication
+- Addition, subtraction, multiplication
 
-Evaluation at numeric values
+- Evaluation at numeric values
 
-Root finding (exact + approximate)
+- Root finding (exact + approximate)
 
-Extrema detection via derivative analysis
+- Extrema detection via derivative analysis
 
-Definite area computation
+- Definite area computation
 
-Example Usage
+### Example Usage
 ```python
 from main import Polynomial, Rat
 
@@ -167,7 +167,7 @@ area = p.area(0, 2)
 print(area)
 ```
 
-## Root Finding Strategy
+### Root Finding Strategy
 
 - Cauchy’s Bound is used to locate a guaranteed root interval
 
@@ -177,7 +177,7 @@ print(area)
 
 - Duplicate roots are filtered using tolerance-based uniqueness
 
-## This guarantees:
+### This guarantees:
 
 - No missed real roots
 
@@ -185,7 +185,7 @@ print(area)
 
 - Deterministic behavior
 
-## Design Notes
+### Design Notes
 
 - Polynomials are immutable in behavior (operations return new objects)
 
