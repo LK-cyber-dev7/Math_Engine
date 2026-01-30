@@ -100,6 +100,98 @@ print(t1.is_zero())                # False
 # String representation
 print(t1)                        # '3/4*x^2'
 ```
+Polynomial Class
+
+The Polynomial class represents a symbolic polynomial in one variable.
+It supports exact algebraic manipulation as well as numerical approximation
+for roots and extrema.
+
+Key Features
+
+Symbolic representation using Term objects
+
+Exact arithmetic via the Rat class
+
+Differentiation & integration
+
+Integer and rational root detection
+
+Numerical root & extrema approximation
+
+Automatic simplification and ordering
+
+Core Capabilities
+
+Addition, subtraction, multiplication
+
+Evaluation at numeric values
+
+Root finding (exact + approximate)
+
+Extrema detection via derivative analysis
+
+Definite area computation
+
+Example Usage
+```python
+from main import Polynomial, Rat
+
+# Create a polynomial
+p = Polynomial("x^3 - 3x + 1")
+
+# Display
+print(p)              # x^3 - 3x + 1
+print(p.degree)       # 3
+
+# Evaluation
+print(p.evaluate_at(2))   # 3
+
+# Derivative
+dp = p.derive()
+print(dp)             # 3x^2 - 3
+
+# Roots (numerical)
+roots = p.all_roots()
+print(roots)
+
+# Extremes
+extremes = p.all_extremes()
+print(extremes)
+
+# Integration
+ip = p.integrate()
+print(ip)             # 1/4*x^4 - 3/2*x^2 + x
+
+# Area under curve
+area = p.area(0, 2)
+print(area)
+```
+
+## Root Finding Strategy
+
+- Cauchy’s Bound is used to locate a guaranteed root interval
+
+- Derivative roots partition the domain into monotonic intervals
+
+- Bisection Method is applied safely in each interval
+
+- Duplicate roots are filtered using tolerance-based uniqueness
+
+## This guarantees:
+
+- No missed real roots
+
+- Numerical stability
+
+- Deterministic behavior
+
+## Design Notes
+
+- Polynomials are immutable in behavior (operations return new objects)
+
+- All symbolic operations preserve exact rational arithmetic
+
+- Numerical approximation is isolated and optional
 ## Tech Stack
 - Python 3
 - Object-Oriented Programming

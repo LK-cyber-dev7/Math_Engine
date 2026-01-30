@@ -1,15 +1,43 @@
 """
-This module can be used for working with rational numbers, terms, and polynomials.
+Math_Engine
+
+A lightweight symbolic mathematics engine for:
+- Rational numbers (Rat)
+- Algebraic terms (Term)
+- Polynomials (Polynomial)
+
+Features:
+- Exact rational arithmetic
+- Symbolic differentiation & integration
+- Integer and rational root finding
+- Numerical root and extrema approximation
+
+Author: Lakshya Keswani
+License: MIT
 """
-# imports
 from __future__ import annotations
+
+# metadata
+__title__ = "Math_Engine"
+__version__ = "0.1.0"
+__author__ = "Lakshya Keswani"
+__license__ = "MIT"
+__all__ = [
+    "Rat",
+    "Term",
+    "Polynomial",
+    "FormatError",
+    "find_factors",
+]
+
+# imports
 import logging
 import math
 from decimal import Decimal
 from numbers import Rational
 from fractions import Fraction
 
-logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 class FormatError(Exception):
     """
@@ -18,6 +46,25 @@ class FormatError(Exception):
     def __init__(self, msg="String formating is NOT ok"):
         super(FormatError, self).__init__(msg)
         self.msg = msg
+
+def find_factors(n: int, pure=False) -> list[int]:
+    """
+    Returns all positive factors of an Integer.To get both negative and positive factors set pure=True
+    :param n: The Integer whose factors are to be found.
+    :param pure: Functions returns all factors, both -ve and +ve, if pure=True.
+    :return: A sorted list of factors
+    """
+    n = abs(n)
+    result = []
+    for i in range(1, int(math.sqrt(n)) + 1):
+        if n % i == 0:
+            result.append(i)
+            if n // i != i:
+                result.append(n // i)
+
+    if pure:
+        result.extend([-i for i in result])
+    return sorted(result)
 
 def _validate(x: str) -> bool:
     if "|" not in x:
@@ -788,7 +835,7 @@ class Term:
     def __neg__(self) -> Term:
         return Term.from_parts(self._coefficient * -1, self._power, var=self._var)
 
-    def __pow__(self, n) -> Term:
+    def __pow__(self, n: int) -> Term:
         if not isinstance(n, int) or n < 0:
             return NotImplemented
         if n == 0:
@@ -812,6 +859,13 @@ class Term:
     def __repr__(self) -> str:
         return self.face
 
+def unique(values, tolerance):
+    result = []
+    for v in values:
+        if not any(abs(v - u) < tolerance for u in result):
+            result.append(v)
+    return result
+
 class Polynomial:
     """
     This class is for working with mathematical polynomials.
@@ -822,11 +876,29 @@ class Polynomial:
 
     Class Properties:
         - face
+        - data
+        - degree
 
     Instance Methods:
         - add
         - multiply
         - subtract
+        - derive
+        - integrate
+        - integer_zero
+        - rational_zero
+        - approximate_root
+        - approximate_extrema
+        - root_after
+        - root_before
+        - extrema_after
+        - extrema_before
+        - all_roots
+        - all_extremes
+        - area
+        - evaluate_at
+        - upward
+        - downward
 
     Static Methods:
         - shorten
@@ -841,9 +913,9 @@ class Polynomial:
             return
 
         expression = expression.replace(self.var, "x")
-        logging.debug("expression before cleaning: %s", expression)
+        logger.debug("expression before cleaning: %s", expression)
         expression = expression.lower()
-        allowed_symbols = ["+","-","*","/","^","(",")","[","]","|","0","1","2","3","4","5","6","7","8","9", "x"]
+        allowed_symbols = ["+","-","*","^","(",")","[","]","|","0","1","2","3","4","5","6","7","8","9", "x"]
         expression = expression.replace(" ", "")
         if "x" not in expression:
             raise FormatError(msg="THERE HAS TO BE ONE VARIABLE!?!!")
@@ -852,7 +924,7 @@ class Polynomial:
                 raise FormatError(msg="Formating of the given expression is not permitted in the grounds of the polynomials")
 
 
-        expression = Polynomial._clean(expression)
+        expression = Polynomial.__clean(expression)
         terms = Polynomial.exp_eval(expression)
         self.terms = Term.arrange(Term.shorten(terms))
 
@@ -860,10 +932,13 @@ class Polynomial:
     def zero(cls):
         obj = cls.__new__(cls)
         obj.terms = []
+        obj.var = "x"
         return obj
 
     @property
     def face(self) -> str:
+        if not self.terms:
+            return "0"
         result = ""
         if self.terms[0].coefficient >= 0:
             result += f"{abs(self.terms[0])}"
@@ -877,8 +952,19 @@ class Polynomial:
 
         return result.replace("x", self.var)
 
+    @property
+    def data(self) -> dict[int, Rat]:
+        return {x.power: x.coefficient for x in self.terms}
+
+    @property
+    def degree(self) -> int:
+        if not self.terms:
+            return -1
+        return max(term.power for term in self.terms)
+
+
     @staticmethod
-    def _clean(expr: str) -> str:
+    def __clean(expr: str) -> str:
         """
         Cleans the expression by handling unary minus signs and removing redundant operators.
         :param expr: The expression string to be cleaned.
@@ -921,7 +1007,7 @@ class Polynomial:
         return expr
 
     @staticmethod
-    def _implicate_multiplication(expr: str) -> str:
+    def __implicate_multiplication(expr: str) -> str:
         """
         Inserts '*' where multiplication is implied, e.g.:
         (x+1)(x+2) -> (x+1)*(x+2)
@@ -936,7 +1022,7 @@ class Polynomial:
                 # cases like ")(", "x(", "2(", ")x", ")2"
                 if (
                         (prev.isdigit() or prev == "x" or prev == ")")
-                        and (ch == "(" or ch == "x" or ch.isdigit())
+                        and (ch == "(" or ch == "x" or ch.isdigit()) and not (prev.isdigit() and ch.isdigit())
                 ):
                     result.append("*")
             result.append(ch)
@@ -945,7 +1031,7 @@ class Polynomial:
         return "".join(result)
 
     @staticmethod
-    def _single_layer_split(expr: str, ops: set[str]) -> list[str]:
+    def __single_layer_split(expr: str, ops: set[str]) -> list[str]:
         """
         Splits an expression at operators that are not inside any brackets.
         """
@@ -984,7 +1070,7 @@ class Polynomial:
         return parts
 
     @staticmethod
-    def _remove_outer_brackets(expr: str) -> str:
+    def __remove_outer_brackets(expr: str) -> str:
         if not expr:
             return expr
 
@@ -1009,14 +1095,14 @@ class Polynomial:
     @staticmethod
     def exp_eval(expr: str) -> list[Term]:
         expr = expr.strip()
-        expr = Polynomial._implicate_multiplication(expr)
+        expr = Polynomial.__implicate_multiplication(expr)
 
         # remove outer brackets
         sign, expr = _leading_unary(expr)
-        expr = Polynomial._remove_outer_brackets(expr)
+        expr = Polynomial.__remove_outer_brackets(expr)
 
         # + / -
-        parts = Polynomial._single_layer_split(expr, {"+", "-"})
+        parts = Polynomial.__single_layer_split(expr, {"+", "-"})
         if len(parts) > 1:
             if sign == -1:
                 parts[0] = "-" + parts[0]
@@ -1026,7 +1112,7 @@ class Polynomial:
             return Term.shorten(terms)
 
         # *
-        factors = Polynomial._single_layer_split(expr, {"*"})
+        factors = Polynomial.__single_layer_split(expr, {"*"})
         if len(factors) > 1:
             result = Polynomial.exp_eval(factors[0])
             for f in factors[1:]:
@@ -1040,6 +1126,367 @@ class Polynomial:
         except FormatError:
             r = Rat(expr)
             return [Term(f"{r}x^0")*sign]
+
+    def evaluate_at(self, n):
+        """
+        Returns f(x) at x=n.
+        :param n: value of x to calculate value of polynomial.
+        :return: f(n)
+        """
+        result = 0
+        for i in self.terms:
+            result += i.evaluate(n)
+
+        return result
+
+    def integer_zero(self) -> list[int]:
+        """
+        Finds integer zeros of the polynomial using Integer Root Theorem.If last constant is not an int, returns empty list.
+        :return: An empty list if no integer zeros are found else a list of integer zeros.
+        """
+        self.terms = Term.arrange(self.terms)
+        if not self.terms:
+            return []
+
+        num = self.data.get(0, 0)
+
+        if not isinstance(num, int) and not num.is_integer():
+            return []
+
+        num = int(num)
+
+        pos_zero = find_factors(num, pure=True)
+        return [i for i in pos_zero if self.evaluate_at(i) == 0]
+
+    def rational_zero(self) -> list[Rat]:
+        """
+        Finds rational zeros of the polynomial using Rational Root Theorem. If the coefficient of highest degree term
+         or the constant term is not an int, returns empty list.
+        :return: An empty list if no rational zeros are found else a list of rational zeros.
+        """
+        self.terms = Term.arrange(self.terms)
+        if not self.terms:
+            return []
+
+        if not (self.terms[-1].is_constant() and not self.terms[-1].is_zero()):
+            return []
+
+        last = self.data.get(0, 0)
+        first = self.data[self.terms[0].power]
+
+        if not isinstance(last, int) or not isinstance(first, int):
+            return []
+
+        pos_zero = [Rat(p, q) for p in find_factors(last, pure=True) for q in find_factors(first, pure=True) if q != 0]
+        return [i for i in pos_zero if self.evaluate_at(i) == 0]
+
+    def derive(self) -> Polynomial:
+        """
+        Derives the polynomial using power rule.
+        :return: The derivative of the polynomial in form of a Polynomial object.
+        """
+        derived_terms = []
+        for term in self.terms:
+            if term.power != 0:
+                new_coefficient = term.coefficient * term.power
+                new_power = term.power - 1
+                derived_terms.append(Term.from_parts(new_coefficient, new_power, var=self.var))
+
+        result_poly = Polynomial("0")
+        result_poly.terms = Term.arrange(derived_terms)
+        return result_poly
+
+    def integrate(self) -> Polynomial:
+        """
+        Integrates the polynomial using power rule.
+        ⚠️ NOTE ⚠️ => Constant of integration is not added.
+        :return: The integral of the polynomial in form of a Polynomial object.
+        """
+        integrated_terms = []
+        for term in self.terms:
+            new_power = term.power + 1
+            new_coefficient = term.coefficient / new_power
+            integrated_terms.append(Term.from_parts(new_coefficient, new_power, var=self.var))
+
+        result_poly = Polynomial("0")
+        result_poly.terms = Term.arrange(integrated_terms)
+        return result_poly
+
+    def area(self, start=0, end=0):
+        """
+        Calculates the definite integral of the polynomial from start to end.
+        :param start: The lower limit of integration.
+        :param end: The upper limit of integration.
+        :return: The area under the curve from start to end as a Rat object.
+        """
+        integral_poly = self.integrate()
+        area = integral_poly.evaluate_at(end) - integral_poly.evaluate_at(start)
+        return area
+
+    @staticmethod
+    def _same_sign(a, b) -> bool:
+        if a == b:
+            return True
+        return (a > 0 and b > 0) or (a < 0 and b < 0)
+
+    def approximate_root(self, start, end, tolerance=1e-7, max_iter=100) -> float:
+        """
+        Approximates a root of the polynomial in the given range using the Bisection Method.
+        Assumes that the there is exactly one root in the given range.
+        :param start: Initial point of the range.
+        :param end: End point of the range.
+        :param tolerance: The acceptable error margin for the approximation.
+        :param max_iter: Maximum times that bisection will be done to find the root.
+        :return: X value of the approximate root.
+        """
+        if Polynomial._same_sign(self.evaluate_at(start), self.evaluate_at(end)):
+            raise ValueError("Function values at the interval endpoints must have opposite signs.")
+
+        mid = (start + end) / 2
+        f_mid = self.evaluate_at(mid)
+        f_start = self.evaluate_at(start)
+        iterations = 0
+        while abs(f_mid) > tolerance and iterations < max_iter:
+            if Polynomial._same_sign(f_start, f_mid):
+                start = mid
+                f_start = self.evaluate_at(start)
+            else:
+                end = mid
+            mid = (start + end) / 2
+            f_mid = self.evaluate_at(mid)
+            iterations += 1
+
+        return mid
+
+    def approximate_extrema(self, start, end, tolerance=1e-7, max_iter=100) -> float:
+        """
+        Approximates an extremum of the polynomial in the given range using the Bisection Method on its derivative.
+        Assumes that the there is exactly one extremum in the given range.
+
+        :param start: Initial point of the range.
+        :param end: End point of the range.
+        :param tolerance: The acceptable error margin for the approximation.
+        :param max_iter: Maximum times that bisection will be done to find the extrema.
+        :return: X value of the approximate extremum.
+        """
+        derivative = self.derive()
+        if Polynomial._same_sign(derivative.evaluate_at(start), derivative.evaluate_at(end)):
+            raise ValueError("Function values at the interval endpoints must have opposite signs.")
+
+        mid = (start + end) / 2
+        f_mid = derivative.evaluate_at(mid)
+        f_start = derivative.evaluate_at(start)
+        iterations = 0
+        while abs(f_mid) > tolerance and iterations < max_iter:
+            if Polynomial._same_sign(f_start, f_mid):
+                start = mid
+                f_start = derivative.evaluate_at(start)
+            else:
+                end = mid
+            mid = (start + end) / 2
+            f_mid = derivative.evaluate_at(mid)
+            iterations += 1
+
+        return mid
+
+    def upward(self, x) -> bool:
+        """
+        Determines if the polynomial is increasing after a given point.
+        :param x: The point to evaluate.
+        :return: True if the polynomial is increasing at x, False otherwise.
+        """
+        derivative = self.derive()
+        return derivative.evaluate_at(x) > 0
+
+    def downward(self, x) -> bool:
+        """
+        Determines if the polynomial is decreasing after a given point.
+        :param x: The point to evaluate.
+        :return: True if the polynomial is decreasing at x, False otherwise.
+        """
+        derivative = self.derive()
+        return derivative.evaluate_at(x) < 0
+
+    def root_after(self, start, tolerance=1e-7, max_iterations=32, initial_step = 1) -> float:
+        """
+        Finds the first root AFTER a given starting point by dynamically bracketing an interval.
+
+        :param start: Point to start searching from.
+        :param tolerance: Acceptable error for the root approximation.
+        :param max_iterations: Maximum attempts to expand the search interval.
+        :param initial_step: Initial step size to expand the search interval.
+        :return: Approximated root as a float.
+        :raises ValueError: If a root cannot be found within the maximum iterations.
+        """
+        iterations = 0
+        f_start = self.evaluate_at(start)
+        step = abs(initial_step)
+        end = start + step
+        f_end = self.evaluate_at(end)
+        while Polynomial._same_sign(f_start, f_end):
+            step *= 2
+            end += step
+            f_end = self.evaluate_at(end)
+            iterations += 1
+            if iterations > max_iterations:
+                raise ValueError("Could not find a root in the range")
+
+        return self.approximate_root(start, end, tolerance)
+
+    def root_before(self, start, tolerance=1e-7, max_iterations=32, initial_step = 1) -> float:
+        """
+        Finds the first root BEFORE a given starting point by dynamically bracketing an interval.
+
+        :param start: Point to start searching from.
+        :param tolerance: Acceptable error for the root approximation.
+        :param max_iterations: Maximum attempts to expand the search interval.
+        :param initial_step: Initial step size to expand the search interval.
+        :return: Approximated root as a float.
+        :raises ValueError: If a root cannot be found within the maximum iterations.
+        """
+        iterations = 0
+        f_start = self.evaluate_at(start)
+        step = abs(initial_step)
+        end = start - step
+        f_end = self.evaluate_at(end)
+        while Polynomial._same_sign(f_start, f_end):
+            step *= 2
+            end -= step
+            f_end = self.evaluate_at(end)
+            iterations += 1
+            if iterations > max_iterations:
+                raise ValueError("Could not find a root in the range")
+
+        return self.approximate_root(start, end, tolerance)
+
+    def extrema_after(self, start, tolerance=1e-7, max_iterations=32, initial_step = 1) -> float:
+        """
+        Finds the first extremum AFTER a given starting point by dynamically bracketing an interval.
+
+        :param start: Point to start searching from.
+        :param tolerance: Acceptable error for the extremum approximation.
+        :param max_iterations: Maximum attempts to expand the search interval.
+        :param initial_step: Initial step size to expand the search interval.
+        :return: Approximated extremum as a float.
+        :raises ValueError: If an extremum cannot be found within the maximum iterations.
+        """
+        derivative = self.derive()
+        iterations = 0
+        f_start = derivative.evaluate_at(start)
+        step = abs(initial_step)
+        end = start + step
+        f_end = derivative.evaluate_at(end)
+        while Polynomial._same_sign(f_start, f_end):
+            step *= 2
+            end += step
+            f_end = derivative.evaluate_at(end)
+            iterations += 1
+            if iterations > max_iterations:
+                raise ValueError("Could not find an extremum in the range")
+
+        return self.approximate_extrema(start, end, tolerance)
+
+    def extrema_before(self, start, tolerance=1e-7, max_iterations=32, initial_step = 1) -> float:
+        """
+        Finds the first extremum BEFORE a given starting point by dynamically bracketing an interval.
+
+        :param start: Point to start searching from.
+        :param tolerance: Acceptable error for the extremum approximation.
+        :param max_iterations: Maximum attempts to expand the search interval.
+        :param initial_step: Initial step size to expand the search interval.
+        :return: Approximated extremum as a float.
+        :raises ValueError: If an extremum cannot be found within the maximum iterations.
+        """
+        derivative = self.derive()
+        iterations = 0
+        f_start = derivative.evaluate_at(start)
+        step = abs(initial_step)
+        end = start - step
+        f_end = derivative.evaluate_at(end)
+        while Polynomial._same_sign(f_start, f_end):
+            step *= 2
+            end -= step
+            f_end = derivative.evaluate_at(end)
+            iterations += 1
+            if iterations > max_iterations:
+                raise ValueError("Could not find an extremum in the range")
+
+        return self.approximate_extrema(end, start, tolerance)
+
+    def root_range(self) -> tuple[float, float]:
+        """
+        Uses Cauchy's bound to find an interval in which all real roots of the polynomial lie.
+        """
+        a_n = abs(self.data[self.degree])
+
+        if a_n == 0:
+            raise ValueError("Leading coefficient cannot be zero")
+
+        max_other = max(
+            abs(c)
+            for d, c in self.data.items()
+            if d != self.degree
+        )
+
+        bound = 1 + max_other / a_n
+        return -bound.value, bound.value
+
+    def _linear_root(self):
+        a = self.data.get(1, Rat(0))
+        b = self.data.get(0, Rat(0))
+        if a == 0:
+            return []
+        else:
+            return [(-b/a).value]
+
+    def all_roots(self, tolerance=1e-7):
+        """
+        Returns all approximated roots. If polynomial has integer or rational roots then those roots may be slightly
+        in accurate due to float inaccuracies. Using integer_zero or rational_zero function is recommended.
+        :param tolerance: Margin of error for roots.
+        :return: List of roots
+        """
+        if self.degree == 1:
+            return self._linear_root()
+        derivative = self.derive()
+
+        extremes = derivative.all_roots(tolerance=tolerance)
+        extremes.sort()
+        lower, upper = self.root_range()
+        ranges = []
+        prev = lower
+        for i in extremes:
+            ranges.append((prev, i))
+            prev = i
+
+        ranges.append((prev, upper))
+
+        result = []
+        for i in ranges:
+            try:
+                root = self.approximate_root(i[0], i[1], tolerance=tolerance)
+                result.append(root)
+            except ValueError:
+                if abs(self.evaluate_at(i[0])) < tolerance:
+                    result.append(i[0])
+                pass
+
+        if abs(self.evaluate_at(upper)) < tolerance:
+            result.append(upper)
+
+        result = unique(result, tolerance=tolerance)
+        result.sort()
+
+        return result
+
+    def all_extremes(self, tolerance=1e-7):
+        """
+        Returns approximation of all extremes.
+        :param tolerance: Margin of error for extremes.
+        :return: A list of extremes
+        """
+        derivative = self.derive()
+        return derivative.all_roots(tolerance=tolerance)
 
     def add(self,other: int | Rat | Term | Polynomial) -> Polynomial:
         """
@@ -1100,6 +1547,9 @@ class Polynomial:
 
     def __sub__(self, other: int | Rat | Term | Polynomial) -> Polynomial:
         return self.subtract(other)
+
+    def __cal__(self, x):
+        return self.evaluate_at(x)
 
     def __str__(self):
         return self.face
