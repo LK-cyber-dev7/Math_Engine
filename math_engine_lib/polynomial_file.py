@@ -240,8 +240,75 @@ class Polynomial:
         return expr[1:-1]
 
     @staticmethod
+    def __get_start(expr: str, n: int) -> int:
+        for i in range(n, -1, -1):
+            if expr[i] == "(":
+                return i
+        raise FormatError("Closed Brackets are not opened")
+
+    @staticmethod
+    def __find_power(expr: str):
+        """
+        Returns (base_start, base_end, power_start, power_end)
+        or None if no power exists.
+        """
+        for i in range(1, len(expr)):
+            if expr[i - 1] == ")" and expr[i] == "^":
+                power_start = i + 1
+                j = power_start
+
+                while j < len(expr) and expr[j].isdigit():
+                    j += 1
+
+                if j == power_start:
+                    raise FormatError("Expression not raised to an Integer.")
+
+                base_start = Polynomial.__get_start(expr, i - 1)
+                base_end = i-1  # index of ')'
+
+                return base_start, base_end, power_start, j
+
+        return None
+
+    @staticmethod
+    def __expand_power(expr: str, info) -> str:
+        base_start, base_end, power_start, power_end = info
+
+        base = expr[base_start:base_end + 1]
+        power = int(expr[power_start:power_end])
+
+        if power > 0:
+            return (
+                    expr[:base_start]
+                    + base * power
+                    + expr[power_end:]
+            )
+        elif power == 0:
+            return (
+                    expr[:base_start]
+                    + "1"
+                    + expr[power_end:]
+            )
+        else:
+            raise FormatError("Power cannot be negative.")
+
+    @staticmethod
+    def __power_brackets(expr: str) -> str:
+        expr = expr.lower().strip().replace(" ", "")
+
+        while True:
+            info = Polynomial.__find_power(expr)
+            if info is None:
+                break
+
+            expr = Polynomial.__expand_power(expr, info)
+
+        return expr
+
+    @staticmethod
     def exp_eval(expr: str) -> list[Term]:
         expr = expr.strip()
+        expr = Polynomial.__power_brackets(expr)
         expr = Polynomial.__implicate_multiplication(expr)
 
         # remove outer brackets
@@ -695,7 +762,7 @@ class Polynomial:
     def __sub__(self, other: int | Rat | Term | Polynomial) -> Polynomial:
         return self.subtract(other)
 
-    def __cal__(self, x):
+    def __call__(self, x):
         return self.evaluate_at(x)
 
     def __str__(self):

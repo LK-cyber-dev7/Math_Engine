@@ -21,6 +21,7 @@ from .utilities_file import FormatError, find_factors, unique
 from .rat_file import Rat
 from .term_file import Term
 from .polynomial_file import Polynomial
+from .graph_file import Graph
 
 # metadata
 __title__ = "Math_Engine"
@@ -33,7 +34,8 @@ __all__ = [
     "Polynomial",
     "FormatError",
     "find_factors",
-    "unique"
+    "unique",
+    "Graph"
 ]
 
 

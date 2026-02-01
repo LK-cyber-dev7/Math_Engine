@@ -86,51 +86,51 @@ class Rat(Rational):
 
     """
 
-    __slots__ = ("_p", "_q", "_locked")
+    __slots__ = ("__p", "__q", "_locked")
 
     def __init__(self,x: str | Rat | int, q: int | None = None) -> None:
         object.__setattr__(self, "_locked", False)
 
         if q is not None and isinstance(x, int):
-            self._p, self._q = x, q
+            self.__p, self.__q = x, q
         elif q is not None and not isinstance(x, int):
             raise TypeError("p and q must be an integer")
         elif q is None and isinstance(x, float):
             tmp = Rat.ftr(x)
-            self._p = tmp._p
-            self._q = tmp._q
+            self.__p = tmp.__p
+            self.__q = tmp.__q
         elif q is None and isinstance(x, Rat):
-            self._p, self._q = x._p, x._q
+            self.__p, self.__q = x.__p, x.__q
         else:
-            self._p, self._q = _parse_rat(str(x))
+            self.__p, self.__q = _parse_rat(str(x))
 
         object.__setattr__(self, "_locked", True)
 
     @property
     def face(self) -> str:
-        if self._q == 1:
-            return f"{self._p}"
-        return f"[{self._p}|{self._q}]"
+        if self.__q == 1:
+            return f"{self.__p}"
+        return f"[{self.__p}|{self.__q}]"
 
     @property
     def value(self) -> float:
-        return self._p / self._q
+        return self.__p / self.__q
 
     @property
     def p(self) -> int:
-        return self._p
+        return self.__p
 
     @property
     def q(self) -> int:
-        return self._q
+        return self.__q
 
     @property
     def numerator(self) -> int:
-        return self._p
+        return self.__p
 
     @property
     def denominator(self) -> int:
-        return self._q
+        return self.__q
 
     @classmethod
     def from_float(cls, n: float) -> "Rat":
@@ -210,16 +210,16 @@ class Rat(Rational):
         Simplifies rational numbers.
         :return: A simplified Rat object.
         """
-        high = math.gcd(self._p, self._q)
-        return Rat(self._p // high, self._q // high)
+        high = math.gcd(self.__p, self.__q)
+        return Rat(self.__p // high, self.__q // high)
 
     def reciprocal(self) -> Rat:
         """
         :return: Reciprocal of self in form of a Rat object.
         """
-        if self._p == 0:
+        if self.__p == 0:
             raise ZeroDivisionError
-        return Rat(self._q, self._p).simplify()
+        return Rat(self.__q, self.__p).simplify()
 
     def add (self,other: Rat | int | float) -> Rat:
         """
@@ -232,11 +232,11 @@ class Rat(Rational):
         if isinstance(other, float):
             other = Rat.ftr(other)
 
-        if self._q == other._q:
-            return Rat(f"[{self._p + other._p}|{self._q}]")
+        if self.__q == other.__q:
+            return Rat(f"[{self.__p + other.__p}|{self.__q}]")
         else:
-            new_q = math.lcm(self._q, other._q)
-            new_p = int(self._p * (new_q // self._q) + other._p * (new_q // other._q))
+            new_q = math.lcm(self.__q, other.__q)
+            new_p = int(self.__p * (new_q // self.__q) + other.__p * (new_q // other.__q))
             return Rat(new_p,new_q)
 
     def multiply(self,other: Rat | int | float) -> Rat:
@@ -250,7 +250,7 @@ class Rat(Rational):
         if isinstance(other, float):
             other = Rat.ftr(other)
 
-        return Rat(self._p * other._p, self._q * other._q)
+        return Rat(self.__p * other.__p, self.__q * other.__q)
 
     def produce(self,n:int) -> Rat:
         """
@@ -258,7 +258,7 @@ class Rat(Rational):
         :param n: an integer to be multiplied by the rational number.
         :return: The equivalent rational number in form of a Rat object.
         """
-        return Rat(self._p * n, self._q * n)
+        return Rat(self.__p * n, self.__q * n)
 
     def _eql(self, other: Rat) -> tuple[Rat, Rat]:
         """
@@ -266,9 +266,9 @@ class Rat(Rational):
         :param other: The other rational number.
         :return: A tuple of the two rational numbers
         """
-        new_q = math.lcm(self._q, other._q)
-        a = Rat(self._p * (new_q // self._q), new_q)
-        b = Rat(other._p * (new_q // other._q), new_q)
+        new_q = math.lcm(self.__q, other.__q)
+        a = Rat(self.__p * (new_q // self.__q), new_q)
+        b = Rat(other.__p * (new_q // other.__q), new_q)
 
         return a,b
 
@@ -276,14 +276,14 @@ class Rat(Rational):
         """
         :return: True if the rational number is an integer, False otherwise.
         """
-        return self._q == 1
+        return self.__q == 1
 
     def as_tuple(self) -> tuple[int, int]:
         """
         returns a tuple of the rational number in form of a Rat object.
         :return: a tuple of the two rational numbers
         """
-        return self._p, self._q
+        return self.__p, self.__q
 
     def __add__(self, other: int | float | Rat) -> Rat:
         return self.add(other)
@@ -347,13 +347,13 @@ class Rat(Rational):
         raise NotImplementedError("Divmod not implemented for Rat")
 
     def __abs__(self) -> Rat:
-        return Rat(f"[{abs(self._p)}|{abs(self._q)}]")
+        return Rat(f"[{abs(self.__p)}|{abs(self.__q)}]")
 
     def __pow__(self, power, modulo=None):
         if isinstance(power, int):
             if power < 0:
                 return self.reciprocal() ** -power
-            return Rat(int(self._p ** power),int(self._q ** power))
+            return Rat(int(self.__p ** power), int(self.__q ** power))
         else:
             return self.value ** power
 
@@ -363,35 +363,35 @@ class Rat(Rational):
     def __eq__(self, other) -> bool:
         if isinstance(other, Rat):
             a,b = self._eql(other)
-            return a._p == b._p
+            return a.__p == b.__p
         else:
             return self.value == other
 
     def __lt__(self, other) -> bool:
         if isinstance(other, Rat):
             tup = self._eql(other)
-            return tup[0]._p < tup[1]._p
+            return tup[0].__p < tup[1].__p
         else:
             return self.value < other
 
     def __le__(self, other) -> bool:
         if isinstance(other, Rat):
             tup = self._eql(other)
-            return tup[0]._p <= tup[1]._p
+            return tup[0].__p <= tup[1].__p
         else:
             return self.value <= other
 
     def __gt__(self, other) -> bool:
         if isinstance(other, Rat):
             tup = self._eql(other)
-            return tup[0]._p > tup[1]._p
+            return tup[0].__p > tup[1].__p
         else:
             return self.value > other
 
     def __ge__(self, other) -> bool:
         if isinstance(other, Rat):
             tup = self._eql(other)
-            return tup[0]._p >= tup[1]._p
+            return tup[0].__p >= tup[1].__p
         else:
             return self.value >= other
 
@@ -400,12 +400,12 @@ class Rat(Rational):
 
     def __getitem__(self, item) -> int:
         if isinstance(item, int):
-            return (self._p, self._q)[item]
+            return (self.__p, self.__q)[item]
         else:
             if item.lower().strip() == "p":
-                return self._p
+                return self.__p
             elif item.lower().strip() == "q":
-                return self._q
+                return self.__q
             else:
                 raise KeyError(f"Invalid key {item} for a Rat object.")
 
@@ -439,16 +439,16 @@ class Rat(Rational):
         return self.face
 
     def __repr__(self) -> str:
-        return f"Rat({self._p} | {self._q})"
+        return f"Rat({self.__p} | {self.__q})"
 
     def __hash__(self):
-        return hash((self._p, self._q))
+        return hash((self.__p, self.__q))
 
     def __bool__(self):
-        return self._p != 0
+        return self.__p != 0
 
     def __copy__(self):
-        return Rat(self._p, self._q)
+        return Rat(self.__p, self.__q)
 
     def __deepcopy__(self, memo):
-        return Rat(self._p, self._q)
+        return Rat(self.__p, self.__q)
