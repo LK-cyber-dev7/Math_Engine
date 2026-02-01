@@ -33,7 +33,7 @@ and conversions while preserving exact rational values.
 ### Example Usage
 
 ```python
-from main import Rat
+from math_engine_lib import Rat
 from fractions import Fraction
 
 # Create Rat objects
@@ -76,7 +76,7 @@ It is designed for use in polynomials and algebraic expressions.
 
 ### Example Usage
 ```python
-from main import Term, Rat
+from math_engine_lib import Term, Rat
 
 # Create Term objects
 t1 = Term("[3|4]x^2")  # 3/4 * x^2
@@ -134,7 +134,7 @@ for roots and extrema.
 
 ### Example Usage
 ```python
-from main import Polynomial, Rat
+from math_engine_lib import Polynomial, Rat
 
 # Create a polynomial
 p = Polynomial("x^3 - 3x + 1")
