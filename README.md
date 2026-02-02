@@ -7,8 +7,65 @@ mathematical objects such as terms, polynomials, and expressions.
 ## Features
 - Polynomial and term representation
 - A Rational number class (`Rat`) with full numeric capabilities
+- Counter class for flexible cyclic ranges and iterations.
 - Simplification of expressions
 - Modular and extensible design
+
+## Counter Class
+
+The Counter class provides a flexible way to cycle through a sequence of numbers or a custom dataset. It is immutable, meaning the underlying data cannot be modified once created, while still allowing iteration and pointer-based access.
+
+### Features
+
+- Endpoints inclusive for ranges.
+
+- Supports int, float, and custom sequences (list or tuple).
+
+- Floats are rounded to 12 decimal places to handle floating-point imperfections.
+
+- Provides a pointer to track the current value, which can be moved forward, backward, or jumped to any index.
+
+- Iteration or cycling does not change the main pointer.
+
+### Class Methods
+| Method                       | Description                                                    |
+|------------------------------|----------------------------------------------------------------|
+| `duplicate(cls, count_obj)`	 | Creates a copy of a Counter object. Useful for safe iteration. |
+### Properties
+| Property  | 	Description                   |
+|-----------|--------------------------------|
+| `value`   | 	Current value of the pointer. |
+| `pointer` | 	Current pointer index.        |
+### Instance Methods
+| Method	     | Description                                             |
+|-------------|---------------------------------------------------------|
+| `advance()` | 	Move pointer forward (wraps to start if at the end).   |
+| `back()	`   | Move pointer backward (wraps to end if at start).       |
+| `jump(n)	`  | Jump pointer directly to index n.                       |
+ | `peek(n) `  | Get value at index n without changing pointer.          |
+ | `reset()	`  | Reset pointer to start.                                 |
+ | `cycle()	`  | Generator to cycle through the dataset infinitely.      |
+### Example Usage
+```python
+from math_engine_lib import Counter
+
+# Range from 0 to 10 inclusive, step 2
+c = Counter(10, 0, 2)  
+print(c.value)       # 0
+c.advance()
+print(c.value)       # 2
+print(c.peek(4))     # 8
+
+# Cycling through values
+cycler = c.cycle()
+for _ in range(8):
+    print(next(cycler), end=" ")  # 0 2 4 6 8 10 0 2
+
+# Duplicate for safe iteration
+c2 = Counter.duplicate(c)
+for val in c2:
+    print(val)
+```
 
 ## Rat Class
 

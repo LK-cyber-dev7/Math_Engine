@@ -17,7 +17,7 @@ License: MIT
 """
 
 # imports
-from .utilities_file import FormatError, find_factors, unique
+from .utilities_file import FormatError, find_factors, unique, Counter
 from .rat_file import Rat
 from .term_file import Term
 from .polynomial_file import Polynomial
@@ -32,6 +32,7 @@ __all__ = [
     "Rat",
     "Term",
     "Polynomial",
+    "Counter",
     "FormatError",
     "find_factors",
     "unique",
